@@ -1,4 +1,4 @@
-"""Schema loading for the parameter-facing public API."""
+"""Catalog loading for the parameter-facing public API."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class SchemaRegistry:
 
     @classmethod
     def load(cls, explicit_path: str | Path | None = None) -> "SchemaRegistry":
-        """Load the first available ``parameters.csv`` candidate.
+        """Load the first available parameter-catalog candidate.
 
         The search order favors deliberate configuration first and convenient
         development defaults second.  Every candidate is checked before the

@@ -15,7 +15,7 @@ Version `0.0.3` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
-- schema-routed `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
+- structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
 - `m.save()`, `m.run()`, `m.runs()`, `m.validate()`, `m.log()`, and `m.clone()`
 - lazy native-engine loading for bundled Windows/Linux engines plus custom engine paths
 - preserving `.inp` parsing/writing that keeps comments, unknown sections, and section order whenever possible
@@ -37,27 +37,6 @@ The package includes the supplied bundled engines:
 - Linux 64-bit: `libswmm5.so`
 - macOS: reserved path only for now; provide a custom engine path until a GitHub Actions build is added
 
-## Schema-driven growth
-
-`swmmx` looks for `parameters.csv` in this order:
-
-1. an explicit path passed internally,
-2. the `SWMMX_SCHEMA_PATH` environment variable,
-3. `src/swmmx/schemas/parameters.csv` inside the package,
-4. `parameters.csv` in the current working directory.
-
-The expected columns are:
-
-- `main_category`
-- `sub_category`
-- `source`
-- `type`
-- `size`
-
-That CSV is treated as the primary API registry for future parameter-facing accessors. Version `0.0.3` ships the current table with the package, uses it as the canonical registry, and exposes the loaded registry through `m.schema`.
-
-Human-readable headers such as `Main category`, `Subcategory / parameter group`, and `Size / structure` are normalized internally to `main_category`, `sub_category`, and `size`, so the source table can stay pleasant to maintain.
-
 ## Time semantics
 
 `m.time.vector()` mirrors SWMM reporting behavior: it starts at the first report interval after `REPORT_START_*` and proceeds through `END_*`.
@@ -69,7 +48,7 @@ frame = m.time.vector() # pandas DataFrame with timestamp index
 Run-time vectors use the actual period count read from the `.out` file after the engine finishes.
 `m.time.count()` remains the expected pre-run count; `m.time.count_run()` is the actual post-run count and requires results.
 
-## Schema-routed parameters
+## Parameter access
 
 ```python
 lengths = m.get.conduit.length()
@@ -80,7 +59,68 @@ m.set.conduit.roughness(0.013)
 m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
-`parameters.csv` determines which dotted paths exist. Version `0.0.3` implements the first physical mappings for common options, rain gages, subcatchments, conduits, ordinary node/link results, and selected derived values. Supported getters default to NumPy output; `format="df"` gives pandas output. Writable schema rows appear in `dir(m.set.<category>)`; attempting to set a derived or result parameter raises a read-only error.
+Supported getters default to NumPy output; `format="df"` gives pandas output. Writable parameters appear in `dir(m.set.<category>)`; attempting to set a derived or result parameter raises a read-only error.
+
+## Public parameter catalog
+
+The public dotted API is organized into the following categories and subcategories:
+
+- **`option_general`**: `flow_units`, `infiltration_model`, `flow_routing`, `link_offsets`, `force_main_equation`, `allow_ponding`, `minimum_slope`, `skip_steady_state`, `system_flow_tolerance`, `lateral_flow_tolerance`
+- **`option_process`**: `ignore_rainfall`, `ignore_snowmelt`, `ignore_groundwater`, `ignore_rdii`, `ignore_routing`, `ignore_quality`
+- **`option_date_time`**: `start_date`, `start_time`, `end_date`, `end_time`, `report_start_date`, `report_start_time`, `report_step`, `wet_step`, `dry_step`, `routing_step`, `rule_step`, `sweep_start`, `sweep_end`, `dry_days`
+- **`option_dynamic_wave`**: `inertial_damping`, `normal_flow_limited`, `surcharge_method`, `variable_step`, `minimum_step`, `lengthening_step`, `minimum_surface_area`, `head_tolerance`, `maximum_trials`, `threads`
+- **`rain_gage`**: `id`, `count`, `format`, `interval`, `snow_catch_factor`, `source_type`, `time_series`, `filename`, `station`, `units`, `rainfall`
+- **`subcatchment`**: `id`, `count`, `rain_gage`, `outlet`, `area`, `width`, `slope`, `impervious_percent`, `curb_length`, `snow_pack`, `tag`, `polygon`, `centroid`, `rainfall`, `snow_depth`, `evaporation`, `infiltration`, `runoff`, `groundwater_flow`, `groundwater_elevation`, `soil_moisture`, `pollutant_concentration`, `n_impervious`, `n_pervious`, `depression_storage_impervious`, `depression_storage_pervious`, `zero_depression_storage_impervious_percent`, `subarea_routing`, `percent_routed`
+- **`infiltration_horton`**: `maximum_rate`, `minimum_rate`, `decay`, `dry_time`, `maximum_volume`
+- **`infiltration_green_ampt`**: `suction_head`, `hydraulic_conductivity`, `initial_moisture_deficit`
+- **`infiltration_curve_number`**: `curve_number`, `conductivity`, `dry_time`
+- **`node`**: `id`, `count`, `type`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`, `tag`, `coordinate`, `external_inflow`, `dry_weather_flow`, `treatment`, `depth`, `head`, `volume`, `lateral_inflow`, `total_inflow`, `flooding`, `overflow`, `pollutant_concentration`
+- **`junction`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`
+- **`outfall`**: `id`, `count`, `invert_elevation`, `type`, `fixed_stage`, `tidal_curve`, `time_series`, `tide_gate`, `route_to`
+- **`flow_divider`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`, `type`, `diverted_link`, `cutoff_flow`, `diversion_curve`, `weir_height`, `weir_coefficient`
+- **`storage_unit`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `storage_curve_type`, `storage_curve`, `area`, `area_coefficient`, `area_exponent`, `area_constant`, `evaporation_factor`, `seepage_loss`
+- **`link`**: `id`, `count`, `type`, `from_node`, `to_node`, `inlet_offset`, `outlet_offset`, `initial_flow`, `maximum_flow`, `flap_gate`, `tag`, `vertices`, `flow`, `depth`, `velocity`, `volume`, `capacity`, `setting`, `pollutant_concentration`
+- **`conduit`**: `id`, `count`, `from_node`, `to_node`, `length`, `roughness`, `inlet_offset`, `outlet_offset`, `initial_flow`, `maximum_flow`, `shape`, `geometry`, `barrels`, `culvert_code`, `entry_loss`, `exit_loss`, `average_loss`, `flap_gate`, `seepage_rate`, `slope`, `full_area`, `full_depth`, `hydraulic_radius`, `full_flow`, `normal_depth`, `critical_depth`, `flow`, `depth`, `velocity`, `capacity`
+- **`pump`**: `id`, `count`, `from_node`, `to_node`, `curve`, `initial_status`, `startup_depth`, `shutoff_depth`, `flow`, `status`, `setting`, `energy`
+- **`orifice`**: `id`, `count`, `from_node`, `to_node`, `type`, `shape`, `height`, `width`, `offset`, `discharge_coefficient`, `flap_gate`, `open_close_time`, `flow`, `setting`
+- **`weir`**: `id`, `count`, `from_node`, `to_node`, `type`, `crest_height`, `length`, `side_slope`, `discharge_coefficient`, `flap_gate`, `end_contractions`, `end_coefficient`, `surcharge`, `road_width`, `road_surface`, `flow`, `setting`
+- **`outlet`**: `id`, `count`, `from_node`, `to_node`, `offset`, `flap_gate`, `rating_type`, `curve`, `coefficient`, `exponent`, `flow`, `setting`
+- **`cross_section`**: `link`, `shape`, `geometry_1`, `geometry_2`, `geometry_3`, `geometry_4`, `barrels`, `culvert_code`, `height`, `width`, `side_slope`, `shape_curve`
+- **`transect`**: `id`, `count`, `roughness_left`, `roughness_right`, `roughness_channel`, `left_bank`, `right_bank`, `stations`, `elevations`, `modifiers`
+- **`curve`**: `id`, `count`, `type`, `x`, `y`, `points`
+- **`coordinate`**: `node_coordinates`, `subcatchment_coordinates`, `link_vertices`, `polygons`, `labels`, `map_dimensions`, `map_units`
+- **`street`**: `id`, `count`, `crown_width`, `curb_height`, `cross_slope`, `roughness`, `depression_storage`, `gutter_width`, `gutter_slope`, `spread`
+- **`inlet`**: `id`, `count`, `type`, `grate_length`, `grate_width`, `grate_type`, `curb_length`, `curb_height`, `slotted_length`, `slotted_width`, `captured_flow`
+- **`inlet_usage`**: `node`, `inlet`, `conduit`, `number`, `clogging_factor`, `flow_restriction`
+- **`lid_control`**: `id`, `count`, `type`
+- **`lid_surface`**: `storage_depth`, `vegetation_fraction`, `roughness`, `slope`, `side_slope`
+- **`lid_pavement`**: `thickness`, `void_ratio`, `impervious_surface_fraction`, `permeability`, `clogging_factor`
+- **`lid_soil`**: `thickness`, `porosity`, `field_capacity`, `wilting_point`, `conductivity`, `conductivity_slope`, `suction_head`
+- **`lid_storage`**: `height`, `void_ratio`, `seepage_rate`, `clogging_factor`
+- **`lid_drain`**: `coefficient`, `exponent`, `offset_height`, `delay`, `open_level`, `closed_level`, `control_curve`
+- **`lid_usage`**: `subcatchment`, `lid_control`, `number`, `area`, `width`, `initial_saturation`, `from_impervious_percent`, `from_pervious_percent`, `outlet`, `drain_to`, `inflow`, `evaporation`, `infiltration`, `surface_outflow`, `drain_outflow`, `storage`
+- **`aquifer`**: `id`, `count`, `porosity`, `wilting_point`, `field_capacity`, `conductivity`, `conductivity_slope`, `tension_slope`, `upper_evaporation_fraction`, `lower_evaporation_depth`, `lower_groundwater_loss_rate`, `bottom_elevation`, `water_table_elevation`, `unsaturated_moisture`, `upper_evaporation_pattern`
+- **`groundwater`**: `subcatchment`, `aquifer`, `node`, `surface_elevation`, `a1`, `b1`, `a2`, `b2`, `a3`, `fixed_depth`, `threshold_elevation`, `lateral_flow_equation`, `deep_flow_equation`
+- **`snow_pack`**: `id`, `count`, `plowable_fraction`, `impervious_fraction`, `pervious_fraction`, `minimum_melt_coefficient`, `maximum_melt_coefficient`, `base_temperature`, `free_water_capacity_fraction`, `initial_snow_depth`, `initial_free_water`, `depth_at_100_percent_cover`, `removal_depth`, `fraction_to_impervious`, `fraction_to_pervious`, `fraction_to_immediate_melt`, `fraction_to_subcatchment`, `fraction_to_outflow`, `destination_subcatchment`
+- **`climate`**: `temperature_time_series`, `evaporation_type`, `evaporation_constant`, `evaporation_monthly`, `evaporation_time_series`, `evaporation_recovery_pattern`, `evaporation_dry_only`, `wind_speed_type`, `wind_speed_monthly`, `snowmelt_parameters`, `areal_depletion_impervious`, `areal_depletion_pervious`
+- **`climate_adjustment`**: `temperature`, `evaporation`, `rainfall`, `conductivity`
+- **`pollutant`**: `id`, `count`, `units`, `rain_concentration`, `groundwater_concentration`, `rdii_concentration`, `decay_coefficient`, `snow_only`, `co_pollutant`, `co_pollutant_fraction`, `dry_weather_flow_concentration`, `initial_concentration`
+- **`land_use`**: `id`, `count`, `sweeping_interval`, `sweeping_availability`, `last_swept`
+- **`coverage`**: `subcatchment`, `land_use`, `percent`
+- **`loading`**: `subcatchment`, `pollutant`, `initial_buildup`
+- **`buildup`**: `land_use`, `pollutant`, `function`, `maximum_buildup`, `rate_constant`, `power`, `normalizer`
+- **`washoff`**: `land_use`, `pollutant`, `function`, `coefficient`, `exponent`, `cleaning_efficiency`, `bmp_efficiency`
+- **`treatment`**: `node`, `pollutant`, `expression`
+- **`time_series`**: `id`, `count`, `datetime`, `values`, `filename`, `description`
+- **`time_pattern`**: `id`, `count`, `type`, `multipliers`
+- **`external_inflow`**: `node`, `constituent`, `time_series`, `type`, `units_factor`, `scale_factor`, `baseline`, `pattern`
+- **`dry_weather_flow`**: `node`, `constituent`, `average_value`, `monthly_pattern`, `daily_pattern`, `hourly_pattern`, `weekend_pattern`
+- **`rdii`**: `node`, `unit_hydrograph`, `sewer_area`
+- **`unit_hydrograph`**: `id`, `count`, `rain_gage`, `month`, `short_term_r`, `short_term_t`, `short_term_k`, `medium_term_r`, `medium_term_t`, `medium_term_k`, `long_term_r`, `long_term_t`, `long_term_k`
+- **`control_rule`**: `id`, `count`, `text`, `conditions`, `actions`, `priority`, `enabled`, `action_log`
+- **`interface_file`**: `rainfall`, `runoff`, `hotstart`, `rdii`, `inflow`, `outflow`, `use_file`, `save_file`
+- **`system_result`**: `air_temperature`, `rainfall`, `snow_depth`, `evaporation`, `infiltration`, `runoff`, `dry_weather_inflow`, `groundwater_inflow`, `rdii_inflow`, `direct_inflow`, `total_lateral_inflow`, `flooding`, `outfall_flow`, `storage_volume`, `pollutant_loading`
+- **`summary`**: `model`, `counts`, `options`, `subcatchment_runoff`, `subcatchment_washoff`, `node_depth`, `node_inflow`, `node_flooding`, `node_surcharge`, `storage_volume`, `outfall_loading`, `link_flow`, `link_velocity`, `conduit_surcharge`, `pump_operation`, `lid_performance`, `runoff_continuity`, `flow_routing_continuity`, `quality_routing_continuity`, `validation_issues`
 
 ## Validation
 

@@ -1,4 +1,4 @@
-"""Schema-routed parameter access for ``m.get`` and ``m.set``."""
+"""Public parameter access for ``m.get`` and ``m.set``."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def normalize_source(source: str) -> str:
 
 @dataclass(frozen=True)
 class ParameterSpec:
-    """One routable row from ``parameters.csv``."""
+    """One routable public parameter definition."""
 
     main_category: str
     sub_category: str
@@ -208,7 +208,7 @@ RESULT_OBJECT_KIND = {
 
 
 class ParameterCatalog:
-    """Schema-driven registry plus the small physical mapping in this release."""
+    """Public parameter catalog plus the small physical mapping in this release."""
 
     def __init__(self, schema: "SchemaRegistry") -> None:
         """Build normalized lookups from the loaded primary schema."""
@@ -234,7 +234,7 @@ class ParameterCatalog:
             self._subcategories_by_api_name.setdefault(main, {})[api_name(sub)] = sub
 
     def spec(self, main_api_name: str, sub_api_name: str) -> ParameterSpec:
-        """Resolve one public dotted path to its schema row."""
+        """Resolve one public dotted path to its parameter definition."""
 
         main = self._categories_by_api_name[main_api_name]
         sub = self._subcategories_by_api_name[main][sub_api_name]
@@ -261,7 +261,7 @@ class ParameterCatalog:
         return sorted(names)
 
     def raw_category(self, main_api_name: str) -> str:
-        """Return the original schema category behind one safe API name."""
+        """Return the original category behind one safe API name."""
 
         return self._categories_by_api_name[main_api_name]
 
@@ -294,7 +294,7 @@ class AccessRoot:
             setattr(self, category_name, CategoryAccessor(self._model, raw_category, self._mode))
 
     def __dir__(self) -> list[str]:
-        """Expose schema-backed category names to IDE completion."""
+        """Expose public category names to IDE completion."""
 
         return self._model._parameter_catalog.categories(self._mode)
 
@@ -339,7 +339,7 @@ class CategoryAccessor:
         return self._model._parameter_catalog.subcategories(self._raw_main_category, self._mode)
 
     def __getattr__(self, subcategory_name: str):
-        """Return a callable getter or setter for one schema parameter."""
+        """Return a callable getter or setter for one public parameter."""
 
         catalog = self._model._parameter_catalog
         if not catalog.has_subcategory(self._raw_main_category, subcategory_name):

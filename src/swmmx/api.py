@@ -103,8 +103,8 @@ class SWMMModel:
         # binaries are reported only when execution is actually requested.
         self._engine_loader = EngineLoader(custom_path=engine_path)
 
-        # ``parameters.csv`` is a registry rather than guessed code in this
-        # first release.  When the user provides it, the model exposes it.
+        # The public parameter catalog is loaded once per model so the routed
+        # API can stay consistent with the package's declared parameter surface.
         self.schema = SchemaRegistry.load(explicit_path=schema_path)
         self._parameter_catalog = ParameterCatalog(self.schema)
 
@@ -182,7 +182,7 @@ class SWMMModel:
         return ids
 
     def _get_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
-        """Return one schema-routed parameter in the requested shape."""
+        """Return one public parameter in the requested shape."""
 
         if format not in {None, "np", "df"}:
             raise ValueError("Unsupported format. Use 'np' or 'df'.")
@@ -220,7 +220,7 @@ class SWMMModel:
         return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
 
     def _set_parameter(self, spec: ParameterSpec, *, value, ids=None):
-        """Write one schema-routed user/ref parameter."""
+        """Write one public user/ref parameter."""
 
         if not spec.is_writable:
             raise ReadOnlyParameterError(
