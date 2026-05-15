@@ -55,4 +55,8 @@ testpaths = ["tests"]
 
 [project.urls]
 Homepage = "https://github.com/mgeranmehr/swmmx_dev"
+<<<<<<< HEAD
 Repository = "https://github.com/mgeranmehr/swmmx_dev"
+=======
+Repository = "https://github.com/mgeranmehr/swmmx_dev"
+>>>>>>> d3d81b71271496417eecff05304b1eb22ee970d8
