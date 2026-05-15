@@ -11,7 +11,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.7` currently provides:
+Version `0.0.9` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -31,6 +31,16 @@ m = swmm("example/example.inp")          # open an existing model
 m = swmm()                               # new SI model, LPS by default
 m = swmm(new="SI", flow_unit="CMS")      # new SI model
 m = swmm(new="US", flow_unit="GPM")      # new US model
+```
+
+## Installation note
+
+`swmmx` currently pins `numpy>=1.26,<2` as a conservative compatibility guardrail for common scientific-Python desktop environments. This avoids pulling NumPy 2 into environments that still contain compiled NumPy-1-era extensions.
+
+If an existing environment already shows a NumPy ABI message such as `A module that was compiled using NumPy 1.x cannot be run in NumPy 2`, repair that environment before importing scientific packages again:
+
+```bash
+python -m pip install --upgrade --force-reinstall "numpy>=1.26,<2"
 ```
 
 ## Native engines

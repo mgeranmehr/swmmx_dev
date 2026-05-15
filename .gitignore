@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.tmp/
 build/
 dist/
 *.egg-info/
@@ -8,3 +9,5 @@ dist/
 *.out
 *.rpt
 *.int
+examples/output/*
+!examples/output/.gitkeep

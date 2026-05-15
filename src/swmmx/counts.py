@@ -101,6 +101,14 @@ class CountRoot:
     def __getattr__(self, category_name: str):
         """Resolve one lazy category count helper."""
 
+        # Python shells, IDEs, and documentation tools probe private hook
+        # names such as ``__custom_documentations__`` during inspection.
+        # ``hasattr`` only suppresses ``AttributeError``; raising a public API
+        # error for those private lookups leaks a noisy traceback into Spyder
+        # even though the original user call succeeded.
+        if category_name.startswith("_"):
+            raise AttributeError(category_name)
+
         spec = self._specs_by_api.get(category_name)
         if spec is None:
             raise UnknownCategoryError(f"Unknown count category '{category_name}'.")

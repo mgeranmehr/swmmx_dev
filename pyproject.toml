@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swmmx"
-version = "0.0.7"
+version = "0.0.9"
 description = "A professional, cross-platform Python toolkit for EPA SWMM."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ classifiers = [
   "Topic :: Scientific/Engineering",
 ]
 dependencies = [
-  "numpy",
+  "numpy>=1.26,<2",
   "pandas",
   "matplotlib",
   "networkx",

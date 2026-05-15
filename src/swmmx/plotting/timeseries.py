@@ -76,6 +76,12 @@ class PlotTimeseriesRoot:
     def __getattr__(self, category_name: str):
         """Return one plotting category or a clear lookup failure."""
 
+        # Rich-shell inspection uses private hook probes.  Keep them as normal
+        # missing Python attributes so IDEs do not surface package-specific
+        # lookup errors while merely inspecting the namespace.
+        if category_name.startswith("_"):
+            raise AttributeError(category_name)
+
         if category_name not in self.__dir__():
             raise UnknownCategoryError(f"Unknown time-series plotting category '{category_name}'.")
         namespace = PlotTimeseriesCategory(self._model, category_name, self._specs.get(category_name, {}))
@@ -102,6 +108,11 @@ class PlotTimeseriesCategory:
 
     def __getattr__(self, variable: str):
         """Return one plotting callable or raise a plotting lookup error."""
+
+        # Match the root namespace behavior for private IDE/introspection
+        # probes such as ``__custom_documentations__``.
+        if variable.startswith("_"):
+            raise AttributeError(variable)
 
         if variable not in self.__dir__():
             raise UnknownParameterError(

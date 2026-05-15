@@ -84,3 +84,15 @@ def test_dynamic_getter_docstring_mentions_ids_format_and_read_only_notes():
     assert "Returns" in length_doc
     assert "read-only result variable" in flow_doc
 
+
+def test_dynamic_namespaces_ignore_private_introspection_hooks():
+    """Spyder/IPython private probes should not become public API errors."""
+
+    model = swmm("example/example.inp")
+
+    assert not hasattr(model.count, "__custom_documentations__")
+    assert not hasattr(model.get, "__custom_documentations__")
+    assert not hasattr(model.set, "__custom_documentations__")
+    assert not hasattr(model.get.conduit, "__custom_documentations__")
+    assert not hasattr(model.plot_timeseries, "__custom_documentations__")
+    assert not hasattr(model.plot_timeseries.link, "__custom_documentations__")

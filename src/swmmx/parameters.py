@@ -180,6 +180,13 @@ INPUT_FIELDS = {
     ("conduit", "outlet_offset"): FieldSpec("CONDUITS", 6),
     ("conduit", "initial_flow"): FieldSpec("CONDUITS", 7),
     ("conduit", "maximum_flow"): FieldSpec("CONDUITS", 8),
+    ("cross_section", "shape"): FieldSpec("XSECTIONS", 1),
+    ("cross_section", "geometry_1"): FieldSpec("XSECTIONS", 2),
+    ("cross_section", "geometry_2"): FieldSpec("XSECTIONS", 3),
+    ("cross_section", "geometry_3"): FieldSpec("XSECTIONS", 4),
+    ("cross_section", "geometry_4"): FieldSpec("XSECTIONS", 5),
+    ("cross_section", "barrels"): FieldSpec("XSECTIONS", 6),
+    ("cross_section", "culvert_code"): FieldSpec("XSECTIONS", 7),
     ("junction", "id"): FieldSpec("JUNCTIONS", 0),
     ("junction", "invert_elevation"): FieldSpec("JUNCTIONS", 1),
     ("junction", "max_depth"): FieldSpec("JUNCTIONS", 2),
@@ -198,6 +205,7 @@ OBJECT_SECTIONS = {
     "flow_divider": ("DIVIDERS",),
     "storage_unit": ("STORAGE",),
     "conduit": ("CONDUITS",),
+    "cross_section": ("XSECTIONS",),
     "pump": ("PUMPS",),
     "orifice": ("ORIFICES",),
     "weir": ("WEIRS",),
@@ -340,6 +348,12 @@ class AccessRoot:
     def __getattr__(self, category_name: str) -> "CategoryAccessor":
         """Return a routed category namespace."""
 
+        # IDEs and rich shells inspect private hook names during completion
+        # and help rendering.  Treat those as ordinary missing Python
+        # attributes so tools such as Spyder can call ``hasattr`` safely.
+        if category_name.startswith("_"):
+            raise AttributeError(category_name)
+
         catalog = self._model._parameter_catalog
         if not catalog.has_category(category_name):
             suggestion = catalog.suggest_category(category_name)
@@ -381,6 +395,12 @@ class CategoryAccessor:
 
     def __getattr__(self, subcategory_name: str):
         """Return a callable getter or setter for one public parameter."""
+
+        # See ``AccessRoot.__getattr__``: private shell/IDE probes are not
+        # user-facing parameter names and therefore should not become
+        # ``UnknownParameterError`` exceptions during introspection.
+        if subcategory_name.startswith("_"):
+            raise AttributeError(subcategory_name)
 
         catalog = self._model._parameter_catalog
         if not catalog.has_subcategory(self._raw_main_category, subcategory_name):

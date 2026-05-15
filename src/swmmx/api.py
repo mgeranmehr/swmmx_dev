@@ -207,7 +207,7 @@ class SWMMModel:
         sections = OBJECT_SECTIONS.get(category)
         if sections is None:
             raise NotImplementedYetError(
-                f"Object indexing for '{category}' is not implemented in version 0.0.7."
+                f"Object indexing for '{category}' is not implemented in version 0.0.9."
             )
         ids: list[str] = []
         for section_name in sections:
@@ -253,7 +253,7 @@ class SWMMModel:
             return self._get_derived_parameter(spec, ids=ids, format=format)
         if spec.source_kind == "mixed":
             raise NotImplementedYetError(
-                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.7."
+                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.9."
             )
 
         # User/ref parameters that map directly to ordinary input columns can be
@@ -261,7 +261,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured access for '{spec.path}' is not implemented in version 0.0.7."
+                f"Structured access for '{spec.path}' is not implemented in version 0.0.9."
             )
         available_ids = self._ids_for_category(spec.main_category)
         selected_ids, explicit_single = normalize_ids(ids, available_ids, spec.main_category)
@@ -291,7 +291,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured setting for '{spec.path}' is not implemented in version 0.0.7."
+                f"Structured setting for '{spec.path}' is not implemented in version 0.0.9."
             )
 
         available_ids = self._ids_for_category(spec.main_category)
@@ -316,7 +316,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.7."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.9."
             )
         value = self._document.get_option(option_key)
         if value is None:
@@ -329,7 +329,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.7."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.9."
             )
         self._document.set_option(option_key, self._render_set_value(value, spec))
         self._dirty = True
@@ -366,7 +366,7 @@ class SWMMModel:
             return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
 
         raise NotImplementedYetError(
-            f"Derived computation for '{spec.path}' is not implemented in version 0.0.7."
+            f"Derived computation for '{spec.path}' is not implemented in version 0.0.9."
         )
 
     def _get_result_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
@@ -380,7 +380,7 @@ class SWMMModel:
         object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
         if object_kind is None:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.7."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.9."
             )
 
         if self._output_file_cache is None or self._output_file_cache.path != self._last_output_path:
@@ -389,7 +389,7 @@ class SWMMModel:
             whole_matrix = self._output_file_cache.matrix(object_kind, spec.sub_category)
         except KeyError as exc:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.7."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.9."
             ) from exc
 
         # ``conduit`` is a subset of SWMM's broader link result block, while
