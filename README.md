@@ -1,5 +1,11 @@
 # swmmx
 
+[![License](https://img.shields.io/pypi/l/swmmx.svg)](https://github.com/mgeranmehr/swmmx_dev/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/swmmx.svg)](https://pypi.org/project/swmmx/)
+[![Python versions](https://img.shields.io/pypi/pyversions/swmmx.svg)](https://pypi.org/project/swmmx/)
+[![Downloads](https://static.pepy.tech/badge/swmmx)](https://pepy.tech/project/swmmx)
+[![Monthly downloads](https://static.pepy.tech/badge/swmmx/month)](https://pepy.tech/project/swmmx)
+
 `swmmx` A Python Toolkit for Building, Editing, Running, Visualizing, and Exporting EPA SWMM Models:
 
 ```python
