@@ -194,7 +194,13 @@ OBJECT_SECTIONS = {
     "node": ("JUNCTIONS", "OUTFALLS", "DIVIDERS", "STORAGE"),
     "link": ("CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS"),
     "time_series": ("TIMESERIES",),
+    "time_pattern": ("PATTERNS",),
+    "curve": ("CURVES",),
+    "pollutant": ("POLLUTANTS",),
+    "land_use": ("LANDUSES",),
+    "aquifer": ("AQUIFERS",),
     "snow_pack": ("SNOWPACKS",),
+    "lid_control": ("LID_CONTROLS",),
 }
 
 RESULT_OBJECT_KIND = {

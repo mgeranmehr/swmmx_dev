@@ -11,11 +11,12 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.3` currently provides:
+Version `0.0.4` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
 - structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
+- editable model construction through `m.add.<category>.<element_type>()` and `m.remove.<category>.<element_type>()`
 - `m.save()`, `m.run()`, `m.runs()`, `m.validate()`, `m.log()`, and `m.clone()`
 - lazy native-engine loading for bundled Windows/Linux engines plus custom engine paths
 - preserving `.inp` parsing/writing that keeps comments, unknown sections, and section order whenever possible
@@ -60,6 +61,64 @@ m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
 Supported getters default to NumPy output; `format="df"` gives pandas output. Writable parameters appear in `dir(m.set.<category>)`; attempting to set a derived or result parameter raises a read-only error.
+
+## Add and remove elements
+
+```python
+from swmmx import swmm
+
+m = swmm(new="SI")
+
+m.add.node.junction("J1", invert_elevation=10, max_depth=3)
+m.add.node.outfall("OUT1", invert_elevation=9, type="FREE")
+
+m.add.link.conduit(
+    "C1",
+    from_node="J1",
+    to_node="OUT1",
+    length=100,
+    roughness=0.013,
+    shape="CIRCULAR",
+    diameter=1.0,
+)
+
+# Referenced objects must exist before they are used.
+m.add.time.time_series(
+    "Rain1",
+    data=[
+        ("2026-01-01 00:00", 0.0),
+        ("2026-01-01 00:05", 5.0),
+    ],
+)
+m.add.hydrology.rain_gage(
+    "RG1",
+    format="INTENSITY",
+    interval="00:05",
+    source_type="TIMESERIES",
+    time_series="Rain1",
+)
+
+m.save("new_model.inp")
+
+m.remove.link.conduit("C1")
+```
+
+The add API validates IDs, required fields, numeric values, enums, and references before it writes EPA SWMM records. The remove API validates dependencies before deletion; by default it refuses unsafe removals, while `force=True` performs only conservative cascades that are known to remain valid. For example, removing a node with `force=True` can remove dependent conduits, but unsupported cascades raise a clear error instead of leaving broken references.
+
+When coordinates are omitted, `swmmx` uses practical display defaults:
+
+- new nodes use `x = max(node x) + 100`, `y = max(node y)`, or `(0, 0)` when the model has no node coordinates;
+- new rain gages use the maximum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates;
+- new subcatchments use the minimum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates.
+
+Every add or remove operation sets `m.modified` to `True`. If the model already had results, the edit also sets `m.results_stale` to `True` and invalidates the old result accessors until the model is run again.
+
+Generic fallbacks are also available:
+
+```python
+m.add_element("node", "junction", "J2", invert_elevation=11, max_depth=2)
+m.remove_element("node", "junction", "J2")
+```
 
 ## Public parameter catalog
 

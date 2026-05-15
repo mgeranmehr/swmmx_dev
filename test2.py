@@ -34,4 +34,6 @@ b4 = m.time.vector_run()
 
 log = m.log()
 
-
+validation = m.validate()
+print(validation.ok)
+print(validation.to_frame())

@@ -40,3 +40,27 @@ class ObjectNotFoundError(SWMMXError):
 
 class InvalidReferenceError(SWMMXError):
     """Raised when a reference parameter points at a missing object."""
+
+
+class DuplicateIDError(SWMMXError):
+    """Raised when a newly-added model element reuses an existing ID."""
+
+
+class UnknownIDError(ObjectNotFoundError):
+    """Raised when add/remove APIs receive IDs that do not exist."""
+
+
+class MissingRequiredParameterError(SWMMXError):
+    """Raised when an add operation is missing a required option."""
+
+
+class InvalidParameterError(SWMMXError):
+    """Raised when an add/remove option has an invalid value or shape."""
+
+
+class DependencyError(SWMMXError):
+    """Raised when removal would leave referenced model elements dangling."""
+
+
+class SaveError(SWMMXError):
+    """Raised when a model cannot be written to disk."""

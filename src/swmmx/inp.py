@@ -166,6 +166,19 @@ LINKS               ALL
 
         return self.sections.get(name.upper())
 
+    def ensure_section(self, name: str) -> InpSection:
+        """Return a section, creating an empty one at the end if needed."""
+
+        # EPA SWMM accepts standard sections even when they appear late in a
+        # file.  Appending new sections preserves every pre-existing section's
+        # order while still allowing new models to grow from a sparse template.
+        key = name.upper()
+        section = self.sections.get(key)
+        if section is None:
+            section = InpSection(name=key, header=f"[{key}]")
+            self.sections[key] = section
+        return section
+
     def rows(self, name: str) -> list[list[str]]:
         """Return tokenized rows for a section, or an empty list if absent."""
 
@@ -176,6 +189,61 @@ LINKS               ALL
         """Return first-column object IDs from a section in file order."""
 
         return [row[0] for row in self.rows(name) if row]
+
+    def append_row(self, section_name: str, tokens: Iterable[object]) -> None:
+        """Append one tokenized data row to a section."""
+
+        section = self.ensure_section(section_name)
+        rendered = " ".join(_quote_token(str(token)) for token in tokens if token is not None and str(token) != "")
+        section.lines.append(rendered)
+        section.modified = True
+
+    def append_rows(self, section_name: str, rows: Iterable[Iterable[object]]) -> None:
+        """Append multiple data rows to one section in order."""
+
+        for row in rows:
+            self.append_row(section_name, row)
+
+    def remove_rows(self, section_name: str, ids: Iterable[str], *, id_index: int = 0) -> list[list[str]]:
+        """Remove rows whose ID field matches one of ``ids``."""
+
+        section = self.section(section_name)
+        if section is None:
+            return []
+
+        # Keep comments and blank lines exactly where they are.  Only parsed data
+        # rows with matching IDs are removed from the preserved line stream.
+        wanted = set(ids)
+        kept_lines: list[str] = []
+        removed_rows: list[list[str]] = []
+        for line in section.lines:
+            tokens = tokenize_data_line(line)
+            if len(tokens) > id_index and tokens[id_index] in wanted:
+                removed_rows.append(tokens)
+                section.modified = True
+                continue
+            kept_lines.append(line)
+        section.lines = kept_lines
+        return removed_rows
+
+    def remove_matching_rows(self, section_name: str, predicate) -> list[list[str]]:
+        """Remove data rows for which ``predicate(tokens)`` returns true."""
+
+        section = self.section(section_name)
+        if section is None:
+            return []
+
+        kept_lines: list[str] = []
+        removed_rows: list[list[str]] = []
+        for line in section.lines:
+            tokens = tokenize_data_line(line)
+            if tokens and predicate(tokens):
+                removed_rows.append(tokens)
+                section.modified = True
+                continue
+            kept_lines.append(line)
+        section.lines = kept_lines
+        return removed_rows
 
     def get_field_values(
         self,

@@ -12,11 +12,13 @@ import numpy as np
 import pandas as pd
 
 from .engine import EngineLoader
+from .elements import EditableElementRegistry, EditableElementService, EditableRoot
 from .errors import (
     InvalidReferenceError,
     ModelNotRunError,
     NotImplementedYetError,
     ReadOnlyParameterError,
+    SaveError,
 )
 from .inp import InpDocument
 from .models import RunResult, SimulationStep, ValidationResult
@@ -107,6 +109,7 @@ class SWMMModel:
         # API can stay consistent with the package's declared parameter surface.
         self.schema = SchemaRegistry.load(explicit_path=schema_path)
         self._parameter_catalog = ParameterCatalog(self.schema)
+        self._editable_registry = EditableElementRegistry()
 
         # Public namespace helpers are concrete objects so IDE completion shows
         # ``vector``, ``count``, ``vector_run``, and ``count_run`` immediately.
@@ -114,6 +117,9 @@ class SWMMModel:
         self.options = OptionView(self)
         self.get = AccessRoot(self, mode="get")
         self.set = AccessRoot(self, mode="set")
+        self._editable_service = EditableElementService(self, self._editable_registry)
+        self.add = EditableRoot(self, mode="add", registry=self._editable_registry)
+        self.remove = EditableRoot(self, mode="remove", registry=self._editable_registry)
 
         # Run state is intentionally separate from input state so clones and
         # edits cannot accidentally masquerade as fresh results.
@@ -122,6 +128,7 @@ class SWMMModel:
         self._last_log = ""
         self._last_output_path: Path | None = None
         self._output_file_cache: OutputFile | None = None
+        self._results_stale = False
         self._runtime_directory: tempfile.TemporaryDirectory[str] | None = None
 
     @property
@@ -136,11 +143,25 @@ class SWMMModel:
 
         return self._run_timestamps is not None
 
+    @property
+    def modified(self) -> bool:
+        """Return whether the in-memory model differs from its last save."""
+
+        return self._dirty
+
+    @property
+    def results_stale(self) -> bool:
+        """Return whether earlier simulation results were invalidated by edits."""
+
+        return self._results_stale
+
     def _invalidate_results(self) -> None:
         """Clear run-dependent caches after any input mutation."""
 
         # Once input values change, previously computed outputs no longer belong
         # to the current model state and must not be served as fresh results.
+        if self._run_timestamps is not None or self._last_run_result is not None or self._last_output_path is not None:
+            self._results_stale = True
         self._run_timestamps = None
         self._last_run_result = None
         self._last_output_path = None
@@ -174,12 +195,12 @@ class SWMMModel:
         sections = OBJECT_SECTIONS.get(category)
         if sections is None:
             raise NotImplementedYetError(
-                f"Object indexing for '{category}' is not implemented in version 0.0.3."
+                f"Object indexing for '{category}' is not implemented in version 0.0.4."
             )
         ids: list[str] = []
         for section_name in sections:
             ids.extend(self._document.section_ids(section_name))
-        return ids
+        return list(dict.fromkeys(ids))
 
     def _get_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Return one public parameter in the requested shape."""
@@ -198,7 +219,7 @@ class SWMMModel:
             return self._get_derived_parameter(spec, ids=ids, format=format)
         if spec.source_kind == "mixed":
             raise NotImplementedYetError(
-                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.3."
+                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.4."
             )
 
         # User/ref parameters that map directly to ordinary input columns can be
@@ -206,7 +227,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured access for '{spec.path}' is not implemented in version 0.0.3."
+                f"Structured access for '{spec.path}' is not implemented in version 0.0.4."
             )
         available_ids = self._ids_for_category(spec.main_category)
         selected_ids, explicit_single = normalize_ids(ids, available_ids, spec.main_category)
@@ -235,7 +256,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured setting for '{spec.path}' is not implemented in version 0.0.3."
+                f"Structured setting for '{spec.path}' is not implemented in version 0.0.4."
             )
 
         available_ids = self._ids_for_category(spec.main_category)
@@ -260,7 +281,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.3."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.4."
             )
         value = self._document.get_option(option_key)
         if value is None:
@@ -273,7 +294,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.3."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.4."
             )
         self._document.set_option(option_key, self._render_set_value(value, spec))
         self._dirty = True
@@ -310,7 +331,7 @@ class SWMMModel:
             return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
 
         raise NotImplementedYetError(
-            f"Derived computation for '{spec.path}' is not implemented in version 0.0.3."
+            f"Derived computation for '{spec.path}' is not implemented in version 0.0.4."
         )
 
     def _get_result_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
@@ -325,7 +346,7 @@ class SWMMModel:
         object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
         if object_kind is None:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.3."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.4."
             )
 
         if self._output_file_cache is None or self._output_file_cache.path != self._last_output_path:
@@ -334,7 +355,7 @@ class SWMMModel:
             whole_matrix = self._output_file_cache.matrix(object_kind, spec.sub_category)
         except KeyError as exc:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.3."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.4."
             ) from exc
 
         # ``conduit`` is a subset of SWMM's broader link result block, while
@@ -433,8 +454,11 @@ class SWMMModel:
         target = Path(inp_path).expanduser().resolve()
 
         # Creating parents is safe and convenient for normal save-as workflows.
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self._document.to_text(), encoding="utf-8")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(self._document.to_text(), encoding="utf-8")
+        except OSError as exc:
+            raise SaveError(f"Could not save SWMM input file to '{target}': {exc}") from exc
 
         # Once saved, the model can use this file directly for later runs until
         # a subsequent mutation marks it dirty again.
@@ -483,6 +507,7 @@ class SWMMModel:
             self._run_timestamps = self._run_timestamps_from_periods(periods)
             self._last_output_path = out_path
             self._output_file_cache = None
+            self._results_stale = False
         else:
             self._run_timestamps = None
             self._last_output_path = None
@@ -534,6 +559,7 @@ class SWMMModel:
             self._run_timestamps = self._run_timestamps_from_periods(periods)
             self._last_output_path = out_path
             self._output_file_cache = None
+            self._results_stale = False
         else:
             self._run_timestamps = None
             self._last_output_path = None
@@ -575,7 +601,18 @@ class SWMMModel:
             schema_path=self.schema.path,
         )
         clone._dirty = self._dirty
+        clone._results_stale = self._results_stale
         return clone
+
+    def add_element(self, category: str, element_type: str, id: str, **options):
+        """Add one editable model element through the generic public fallback."""
+
+        return self._editable_service.add(category, element_type, id, **options)
+
+    def remove_element(self, category: str, element_type: str, ids, force: bool = False):
+        """Remove editable model elements through the generic public fallback."""
+
+        return self._editable_service.remove(category, element_type, ids, force=force)
 
     def section(self, name: str):
         """Return tokenized rows for a supported section by name."""
@@ -596,6 +633,11 @@ class SWMMModel:
             "CURVES",
             "PATTERNS",
             "DWF",
+            "COORDINATES",
+            "SYMBOLS",
+            "POLYGONS",
+            "VERTICES",
+            "LOSSES",
         }
         key = name.upper()
         if key not in supported:
