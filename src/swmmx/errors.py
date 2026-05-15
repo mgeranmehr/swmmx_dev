@@ -25,3 +25,18 @@ class ModelNotRunError(SWMMXError):
 class NotImplementedYetError(SWMMXError):
     """Raised when a preserved-but-unsupported section is explicitly accessed."""
 
+
+class DimensionMismatchError(SWMMXError):
+    """Raised when setter values do not match the selected object count."""
+
+
+class ReadOnlyParameterError(SWMMXError):
+    """Raised when a caller attempts to set a derived or result parameter."""
+
+
+class ObjectNotFoundError(SWMMXError):
+    """Raised when one or more requested object IDs do not exist."""
+
+
+class InvalidReferenceError(SWMMXError):
+    """Raised when a reference parameter points at a missing object."""

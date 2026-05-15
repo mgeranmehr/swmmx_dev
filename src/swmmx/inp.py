@@ -39,6 +39,14 @@ def tokenize_data_line(line: str) -> list[str]:
     return shlex.split(data, posix=True)
 
 
+def _quote_token(token: str) -> str:
+    """Return one token in a SWMM-safe textual form."""
+
+    # Only tokens with whitespace need quotes; keeping simple numeric tokens
+    # unquoted makes regenerated rows pleasantly close to ordinary SWMM files.
+    return f'"{token}"' if any(character.isspace() for character in token) else token
+
+
 @dataclass
 class InpSection:
     """One input-file section plus its original raw lines."""
@@ -164,6 +172,72 @@ LINKS               ALL
         section = self.section(name)
         return section.data_rows() if section else []
 
+    def section_ids(self, name: str) -> list[str]:
+        """Return first-column object IDs from a section in file order."""
+
+        return [row[0] for row in self.rows(name) if row]
+
+    def get_field_values(
+        self,
+        section_name: str,
+        field_index: int,
+        ids: list[str],
+        *,
+        id_index: int = 0,
+    ) -> list[str]:
+        """Return raw field values for selected IDs from one data section."""
+
+        # Build a row lookup once so selected IDs can be returned in the exact
+        # order requested by the caller rather than only in file order.
+        lookup: dict[str, list[str]] = {}
+        for row in self.rows(section_name):
+            if len(row) > id_index:
+                lookup[row[id_index]] = row
+
+        values: list[str] = []
+        for object_id in ids:
+            row = lookup[object_id]
+            values.append(row[field_index] if len(row) > field_index else "")
+        return values
+
+    def set_field_values(
+        self,
+        section_name: str,
+        field_index: int,
+        values_by_id: dict[str, object],
+        *,
+        id_index: int = 0,
+    ) -> None:
+        """Update raw field values for selected IDs in one data section."""
+
+        section = self.section(section_name)
+        if section is None:
+            raise KeyError(section_name)
+
+        for line_index, line in enumerate(section.lines):
+            tokens = tokenize_data_line(line)
+            if len(tokens) <= id_index:
+                continue
+            object_id = tokens[id_index]
+            if object_id not in values_by_id:
+                continue
+
+            # Optional trailing fields sometimes do not exist in the original
+            # row.  Padding with empty strings keeps the intended column index
+            # stable before the chosen value is inserted.
+            while len(tokens) <= field_index:
+                tokens.append("")
+            tokens[field_index] = str(values_by_id[object_id])
+
+            # Preserve any inline semicolon comment while normalizing only the
+            # modified row's spacing; untouched rows remain byte-for-byte alike.
+            _, marker, comment = line.partition(";")
+            rendered = " ".join(_quote_token(token) for token in tokens)
+            if marker:
+                rendered = f"{rendered} ;{comment}"
+            section.lines[line_index] = rendered.rstrip()
+            section.modified = True
+
     def options(self) -> "OrderedDict[str, str]":
         """Return parsed options as an ordered, mutable mapping."""
 
@@ -272,4 +346,3 @@ LINKS               ALL
             return datetime.strptime(f"{date_text} {time_text or '00:00:00'}", "%m/%d/%Y %H:%M:%S")
 
         return combine(start_date, start_time), combine(report_date, report_time), combine(end_date, end_time)
-

@@ -1,10 +1,4 @@
-"""Schema loading for the future parameter-facing public API.
-
-The project owner intends ``parameters.csv`` to be the primary API map.  The
-file is not present in the initial repository state, so this module is built to
-discover it when available while keeping the first release operational without
-inventing rows that do not yet exist.
-"""
+"""Schema loading for the parameter-facing public API."""
 
 from __future__ import annotations
 
@@ -52,7 +46,9 @@ class SchemaRegistry:
     """A thin, immutable wrapper around the loaded parameter registry table."""
 
     frame: pd.DataFrame
+    details: pd.DataFrame
     path: Path | None = None
+    details_path: Path | None = None
 
     @classmethod
     def load(cls, explicit_path: str | Path | None = None) -> "SchemaRegistry":
@@ -84,10 +80,33 @@ class SchemaRegistry:
                 frame = pd.read_csv(candidate)
                 frame = frame.rename(columns={column: _canonicalize_column_name(column) for column in frame.columns})
                 cls._validate_columns(frame, candidate)
-                return cls(frame=frame.copy(), path=candidate.resolve())
+                details, details_path = cls._load_details(candidate)
+                return cls(
+                    frame=frame.copy(),
+                    details=details,
+                    path=candidate.resolve(),
+                    details_path=details_path,
+                )
 
         # A well-formed empty frame keeps downstream code simple and explicit.
-        return cls(frame=pd.DataFrame(columns=list(REQUIRED_COLUMNS)), path=None)
+        return cls(frame=pd.DataFrame(columns=list(REQUIRED_COLUMNS)), details=pd.DataFrame(), path=None)
+
+    @staticmethod
+    def _load_details(schema_path: Path) -> tuple[pd.DataFrame, Path | None]:
+        """Load the optional companion ``all.csv`` table when it is available."""
+
+        # Prefer a companion file beside the chosen schema, then the packaged
+        # default, then the developer-friendly current working directory.
+        package_root = Path(__file__).resolve().parent
+        candidates = (
+            schema_path.with_name("all.csv"),
+            package_root / "schemas" / "all.csv",
+            Path.cwd() / "all.csv",
+        )
+        for candidate in candidates:
+            if candidate.exists():
+                return pd.read_csv(candidate).copy(), candidate.resolve()
+        return pd.DataFrame(), None
 
     @staticmethod
     def _validate_columns(frame: pd.DataFrame, path: Path) -> None:
