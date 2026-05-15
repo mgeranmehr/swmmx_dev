@@ -1,6 +1,6 @@
 # swmmx
 
-`swmmx` is a Python 3.10+ toolkit for EPA SWMM with a deliberately small, stable first public surface:
+`swmmx` A Python Toolkit for Building, Editing, Running, Visualizing, and Exporting EPA SWMM Models:
 
 ```python
 from swmmx import swmm
