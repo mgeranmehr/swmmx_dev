@@ -1,0 +1,92 @@
+name: build macOS SWMM engine
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-slice:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-15-intel
+          - arch: arm64
+            runner: macos-15
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout swmmx
+        uses: actions/checkout@v4
+
+      - name: Checkout official EPA SWMM
+        uses: actions/checkout@v4
+        with:
+          repository: USEPA/Stormwater-Management-Model
+          ref: v5.2.4
+          path: vendor/swmm
+
+      - name: Configure SWMM
+        run: |
+          cmake -S vendor/swmm -B build/swmm-${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build SWMM
+        run: |
+          cmake --build build/swmm-${{ matrix.arch }} --config Release --parallel
+
+      - name: Collect dylib
+        run: |
+          lib="$(find build/swmm-${{ matrix.arch }} -name 'libswmm5*.dylib' -print -quit)"
+          test -n "$lib"
+          mkdir -p artifact
+          cp "$lib" "artifact/libswmm5-${{ matrix.arch }}.dylib"
+
+      - name: Upload architecture slice
+        uses: actions/upload-artifact@v4
+        with:
+          name: swmm-${{ matrix.arch }}
+          path: artifact/libswmm5-${{ matrix.arch }}.dylib
+
+  merge-universal2:
+    needs: build-slice
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout swmmx
+        uses: actions/checkout@v4
+
+      - name: Download Intel dylib
+        uses: actions/download-artifact@v5
+        with:
+          name: swmm-x86_64
+          path: artifacts/x86_64
+
+      - name: Download Apple Silicon dylib
+        uses: actions/download-artifact@v5
+        with:
+          name: swmm-arm64
+          path: artifacts/arm64
+
+      - name: Create universal macOS dylib
+        run: |
+          mkdir -p src/swmmx/bin/macos
+          lipo -create \
+            artifacts/x86_64/libswmm5-x86_64.dylib \
+            artifacts/arm64/libswmm5-arm64.dylib \
+            -output src/swmmx/bin/macos/libswmm5.dylib
+
+          lipo -info src/swmmx/bin/macos/libswmm5.dylib
+          file src/swmmx/bin/macos/libswmm5.dylib
+
+      - name: Upload universal dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: libswmm5-macos-universal2
+          path: src/swmmx/bin/macos/libswmm5.dylib
