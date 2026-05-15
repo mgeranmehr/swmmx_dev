@@ -12,7 +12,7 @@ output_dir.mkdir(parents=True, exist_ok=True)
 m = swmm(examples_dir / "example.inp")
 m.save(output_dir / "simple_03_working_copy.inp")
 
-# In swmmx 0.0.9, ``runs()`` exposes timing records. Live ``step.get`` /
+# In swmmx, ``runs()`` exposes timing records. Live ``step.get`` /
 # ``step.set`` runtime control is reserved for a future release.
 steps = m.runs()
 for step in steps:

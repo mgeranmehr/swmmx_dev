@@ -11,7 +11,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.9` currently provides:
+Version `0.0.10` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -35,13 +35,23 @@ m = swmm(new="US", flow_unit="GPM")      # new US model
 
 ## Installation note
 
-`swmmx` currently pins `numpy>=1.26,<2` as a conservative compatibility guardrail for common scientific-Python desktop environments. This avoids pulling NumPy 2 into environments that still contain compiled NumPy-1-era extensions.
+`swmmx` uses conservative desktop-friendly dependency ranges:
 
-If an existing environment already shows a NumPy ABI message such as `A module that was compiled using NumPy 1.x cannot be run in NumPy 2`, repair that environment before importing scientific packages again:
+- `numpy>=1.26,<2`
+- `pandas>=2.1,<3`
+- `matplotlib>=3.8,<3.9`
+- `networkx>=3,<3.4`
+
+These bounds avoid pulling the newest scientific stack into an older desktop environment just because `swmmx` was installed there.
+
+If an existing Spyder/Anaconda environment already shows a NumPy ABI message such as `A module that was compiled using NumPy 1.x cannot be run in NumPy 2`, close Spyder first, remove the user-site copies that are shadowing the base environment, then reinstall `swmmx`:
 
 ```bash
-python -m pip install --upgrade --force-reinstall "numpy>=1.26,<2"
+python -m pip uninstall -y numpy pandas matplotlib networkx
+python -m pip install path/to/swmmx-0.0.10-py3-none-any.whl
 ```
+
+Restart Spyder or its kernel after changing compiled packages.
 
 ## Native engines
 

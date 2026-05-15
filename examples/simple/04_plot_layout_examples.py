@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-import matplotlib
+#import matplotlib
+#matplotlib.use("Agg")
 
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from swmmx import swmm
@@ -25,7 +25,7 @@ fig, _ = m.plot_layout(
     title="Network Layout",
     grid=True,
     axis=True,
-    show=False,
+    show=True,
     save_path=output_dir / "simple_layout_axes.png",
 )
 plt.close(fig)
@@ -34,7 +34,7 @@ fig, _ = m.plot_layout(
     nodes={"size": 40, "color": "black"},
     links={"width": 2.0, "color": "gray"},
     subcatchments={"color": "lightgreen", "edge_color": "green"},
-    show=False,
+    show=True,
     save_path=output_dir / "simple_layout_custom_styles.png",
 )
 plt.close(fig)
@@ -49,7 +49,7 @@ fig, _ = m.plot_layout(
             "cmap": "viridis",
         }
     },
-    show=False,
+    show=True,
     save_path=output_dir / "simple_layout_by_roughness.png",
 )
 plt.close(fig)
@@ -64,7 +64,7 @@ fig, _ = m.plot_layout(
             "mode": "continuous",
         }
     },
-    show=False,
+    show=True,
     save_path=output_dir / "simple_layout_by_max_flow.png",
 )
 plt.close(fig)
@@ -72,7 +72,7 @@ plt.close(fig)
 risk_score = {"P001": 1, "P005": 2, "P009": 1, "P011": 3}
 fig, _ = m.plot_layout(
     links={"color": {"by": "user", "data": risk_score, "mode": "discrete"}},
-    show=False,
+    show=True,
     save_path=output_dir / "simple_layout_by_user_risk.png",
 )
 plt.close(fig)

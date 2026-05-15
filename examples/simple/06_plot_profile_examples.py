@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-import matplotlib
+#import matplotlib
+#matplotlib.use("Agg")
 
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from swmmx import swmm
@@ -26,7 +26,7 @@ fig, _ = m.plot_profile.nodes(
     show_hgl=True,
     aggregation="max",
     title="Profile from P011 to Outlet",
-    show=False,
+    show=True,
     save_path=output_dir / "simple_profile_nodes.png",
 )
 plt.close(fig)
@@ -38,7 +38,7 @@ fig, _ = m.plot_profile.links(
     show_hgl=True,
     time_step=-1,
     title="Selected Link Profile",
-    show=False,
+    show=True,
     save_path=output_dir / "simple_profile_links.png",
 )
 plt.close(fig)
@@ -47,7 +47,7 @@ fig, _ = m.plot_profile.longest(
     show_hgl=True,
     aggregation="max",
     title="Longest Path Profile",
-    show=False,
+    show=True,
     save_path=output_dir / "simple_profile_longest.png",
 )
 plt.close(fig)
