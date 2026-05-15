@@ -11,13 +11,14 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.5` currently provides:
+Version `0.0.6` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
 - structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
 - editable model construction through `m.add.<category>.<element_type>()` and `m.remove.<category>.<element_type>()`
 - matplotlib plotting through `m.plot_layout()`, `m.plot_timeseries.<category>.<sub_category>()`, and `m.plot_profile.*`
+- external-format export through `m.export.gis()`, `m.export.csv()`, and `m.export.excel()`
 - `m.save()`, `m.run()`, `m.runs()`, `m.validate()`, `m.log()`, and `m.clone()`
 - lazy native-engine loading for bundled Windows/Linux engines plus custom engine paths
 - preserving `.inp` parsing/writing that keeps comments, unknown sections, and section order whenever possible
@@ -162,6 +163,34 @@ m.plot_profile.nodes(
 `m.plot_timeseries.<category>.<sub_category>()` routes through the result API and plots one or many timestamped series with matplotlib. `m.plot_profile.nodes()`, `.links()`, and `.longest()` build directed hydraulic paths and render geometry-first longitudinal profiles, with HGL/water overlays available after a run.
 
 All plotting calls return `(fig, ax)`, accept `ax=` for composition, and support `save_path=` / `save_format=`. Common errors are explicit: layout plots need coordinates, result-based plots need `m.run()`, invalid IDs raise `UnknownIDError`, and disconnected profile requests raise `NoPathError`.
+
+## Export
+
+```python
+m.export.gis()
+
+m.export.gis(
+    path="exports/gis",
+    elements=["nodes", "links", "subcatchments"],
+)
+
+m.export.csv(
+    path="exports/csv",
+    elements="all",
+    time_step=-1,
+)
+
+m.export.excel(
+    path="exports",
+    file_name="model_export.xlsx",
+)
+```
+
+If `path` is omitted, exports go beside the model file when one exists, otherwise into the current working directory. `file_name` controls a single workbook name or the prefix used for multi-file CSV/GIS exports. `elements` accepts named tables, groups such as `hydrology` or `quality`, or `"all"`.
+
+When results are available, `time_step=-1` attaches the last simulated snapshot to result-capable tables. Without results, exports continue with parameter-only tables and a warning by default; use `strict_results=True` when missing results should be treated as an error. CSV writes one UTF-8 file per table, while Excel writes one workbook with one sheet per selected table.
+
+GIS export writes spatial layers for nodes, links, subcatchments, and rain gages. It requires the optional packages `geopandas` and `shapely` (`pip install geopandas shapely`). Existing outputs are protected by default; pass `overwrite=True` only when replacing files is intentional.
 
 ## Public parameter catalog
 

@@ -88,3 +88,23 @@ class NoPathError(PlotError):
 
 class InvalidPathError(PlotError):
     """Raised when user-supplied profile links do not form a valid path."""
+
+
+class ExportError(SWMMXError):
+    """Base class for export-specific failures."""
+
+
+class ExportGeometryError(ExportError):
+    """Raised when GIS export cannot construct required geometry."""
+
+
+class UnknownExportElementError(ExportError):
+    """Raised when export selection contains an unsupported element name."""
+
+
+class OptionalDependencyError(ExportError):
+    """Raised when an optional export dependency is not installed."""
+
+
+class FormatError(ExportError):
+    """Raised when an export format or driver is unsupported."""
