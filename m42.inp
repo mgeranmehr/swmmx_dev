@@ -1,0 +1,24 @@
+[TITLE]
+;;Project Title/Notes
+ swmmx model
+
+[OPTIONS]
+;;Option             Value
+FLOW_UNITS           LPS
+INFILTRATION         HORTON
+FLOW_ROUTING         DYNWAVE
+START_DATE           01/01/2000
+START_TIME           00:00:00
+REPORT_START_DATE    01/01/2000
+REPORT_START_TIME    00:00:00
+END_DATE             01/01/2000
+END_TIME             01:00:00
+REPORT_STEP          00:05:00
+ROUTING_STEP         0:00:30
+
+[REPORT]
+INPUT               NO
+CONTROLS            NO
+SUBCATCHMENTS       ALL
+NODES               ALL
+LINKS               ALL
