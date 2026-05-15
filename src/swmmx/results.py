@@ -76,6 +76,23 @@ class OutputFile:
         "volume": 3,
         "capacity": 4,
     }
+    SYSTEM_VARIABLES = {
+        "air_temperature": 0,
+        "rainfall": 1,
+        "snow_depth": 2,
+        "evaporation": 3,
+        "infiltration": 4,
+        "runoff": 5,
+        "dry_weather_inflow": 6,
+        "groundwater_inflow": 7,
+        "rdii_inflow": 8,
+        "direct_inflow": 9,
+        "total_lateral_inflow": 10,
+        "flooding": 11,
+        "outflow": 12,
+        "volume": 13,
+        "evaporation_loss": 14,
+    }
 
     def __init__(self, path: str | Path) -> None:
         """Read and validate the immutable binary file payload."""
@@ -163,3 +180,23 @@ class OutputFile:
             block = float_record[block_offset : block_offset + count * result_count]
             matrix[period_index, :] = block.reshape(count, result_count)[:, variable_index]
         return matrix
+
+    def system_series(self, variable: str) -> np.ndarray:
+        """Return one system-wide result variable as a one-dimensional series."""
+
+        if variable not in self.SYSTEM_VARIABLES:
+            raise KeyError(f"Unsupported output result 'system.{variable}'.")
+        variable_index = self.SYSTEM_VARIABLES[variable]
+        series = np.empty(self.summary.periods, dtype=np.float64)
+        system_offset = (
+            self.header.subcatchments * self.subcatchment_result_count
+            + self.header.nodes * self.node_result_count
+            + self.header.links * self.link_result_count
+        )
+        for period_index in range(self.summary.periods):
+            record_start = self.summary.output_start_position + period_index * self.period_size
+            floats_start = record_start + 8
+            floats_end = floats_start + 4 * self.period_float_count
+            float_record = np.frombuffer(self._data[floats_start:floats_end], dtype="<f4")
+            series[period_index] = float_record[system_offset + variable_index]
+        return series

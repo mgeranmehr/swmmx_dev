@@ -64,3 +64,27 @@ class DependencyError(SWMMXError):
 
 class SaveError(SWMMXError):
     """Raised when a model cannot be written to disk."""
+
+
+class PlotError(SWMMXError):
+    """Base class for plotting-specific failures."""
+
+
+class PlotDataError(PlotError):
+    """Raised when a plot cannot be built from the available model data."""
+
+
+class UnknownCategoryError(PlotError):
+    """Raised when a plotting namespace category does not exist."""
+
+
+class UnknownParameterError(PlotError):
+    """Raised when a plotting namespace parameter does not exist."""
+
+
+class NoPathError(PlotError):
+    """Raised when no hydraulic path exists between requested nodes."""
+
+
+class InvalidPathError(PlotError):
+    """Raised when user-supplied profile links do not form a valid path."""

@@ -35,6 +35,7 @@ from .parameters import (
     normalize_ids,
     normalize_values,
 )
+from .plotting import PlotProfileAccessor, PlotTimeseriesRoot, plot_layout as render_layout
 from .results import OutputFile, OutputSummary
 from .schema import SchemaRegistry
 from .time import TimeAccessor, build_timestamps, parse_duration
@@ -120,6 +121,8 @@ class SWMMModel:
         self._editable_service = EditableElementService(self, self._editable_registry)
         self.add = EditableRoot(self, mode="add", registry=self._editable_registry)
         self.remove = EditableRoot(self, mode="remove", registry=self._editable_registry)
+        self.plot_timeseries = PlotTimeseriesRoot(self)
+        self.plot_profile = PlotProfileAccessor(self)
 
         # Run state is intentionally separate from input state so clones and
         # edits cannot accidentally masquerade as fresh results.
@@ -195,7 +198,7 @@ class SWMMModel:
         sections = OBJECT_SECTIONS.get(category)
         if sections is None:
             raise NotImplementedYetError(
-                f"Object indexing for '{category}' is not implemented in version 0.0.4."
+                f"Object indexing for '{category}' is not implemented in version 0.0.5."
             )
         ids: list[str] = []
         for section_name in sections:
@@ -219,7 +222,7 @@ class SWMMModel:
             return self._get_derived_parameter(spec, ids=ids, format=format)
         if spec.source_kind == "mixed":
             raise NotImplementedYetError(
-                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.4."
+                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.5."
             )
 
         # User/ref parameters that map directly to ordinary input columns can be
@@ -227,7 +230,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured access for '{spec.path}' is not implemented in version 0.0.4."
+                f"Structured access for '{spec.path}' is not implemented in version 0.0.5."
             )
         available_ids = self._ids_for_category(spec.main_category)
         selected_ids, explicit_single = normalize_ids(ids, available_ids, spec.main_category)
@@ -256,7 +259,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured setting for '{spec.path}' is not implemented in version 0.0.4."
+                f"Structured setting for '{spec.path}' is not implemented in version 0.0.5."
             )
 
         available_ids = self._ids_for_category(spec.main_category)
@@ -281,7 +284,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.4."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.5."
             )
         value = self._document.get_option(option_key)
         if value is None:
@@ -294,7 +297,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.4."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.5."
             )
         self._document.set_option(option_key, self._render_set_value(value, spec))
         self._dirty = True
@@ -331,7 +334,7 @@ class SWMMModel:
             return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
 
         raise NotImplementedYetError(
-            f"Derived computation for '{spec.path}' is not implemented in version 0.0.4."
+            f"Derived computation for '{spec.path}' is not implemented in version 0.0.5."
         )
 
     def _get_result_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
@@ -346,7 +349,7 @@ class SWMMModel:
         object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
         if object_kind is None:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.4."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.5."
             )
 
         if self._output_file_cache is None or self._output_file_cache.path != self._last_output_path:
@@ -355,7 +358,7 @@ class SWMMModel:
             whole_matrix = self._output_file_cache.matrix(object_kind, spec.sub_category)
         except KeyError as exc:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.4."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.5."
             ) from exc
 
         # ``conduit`` is a subset of SWMM's broader link result block, while
@@ -613,6 +616,108 @@ class SWMMModel:
         """Remove editable model elements through the generic public fallback."""
 
         return self._editable_service.remove(category, element_type, ids, force=force)
+
+    def plot_layout(
+        self,
+        legend: bool = True,
+        grid: bool = False,
+        title: str | None = None,
+        legend_title: str | None = None,
+        axis: bool = False,
+        x_axis_title: str | None = None,
+        y_axis_title: str | None = None,
+        save_format: str | None = None,
+        save_path: str | Path | None = None,
+        figsize: tuple[float, float] = (10, 8),
+        dpi: int = 300,
+        ax=None,
+        show: bool = True,
+        nodes=None,
+        links=None,
+        subcatchments=None,
+        rain_gages=None,
+        labels=None,
+        link_color_by=None,
+        link_color_mode=None,
+        link_cmap=None,
+        node_color_result=None,
+        node_result_aggregation=None,
+        link_user_data=None,
+    ):
+        """Plot the mapped SWMM network layout with matplotlib.
+
+        Parameters
+        ----------
+        legend, grid, title, legend_title, axis, x_axis_title, y_axis_title:
+            Common presentation controls.  Coordinate axes are hidden by
+            default; legends are shown by default.
+        save_format, save_path:
+            Optional figure-saving controls.  Supplying only ``save_format``
+            writes ``swmm_layout.<format>`` beside the model path when possible.
+        figsize, dpi, ax, show:
+            Standard matplotlib controls.  Supply ``ax`` to compose into an
+            existing figure; use ``show=False`` in scripts and tests.
+        nodes, links, subcatchments, rain_gages, labels:
+            Optional layer dictionaries supporting static styling and, for the
+            first three layers, data-driven color/size encodings.
+
+        Examples
+        --------
+        >>> m.plot_layout()
+        >>> m.plot_layout(
+        ...     title="Network Layout",
+        ...     nodes={"size": 40, "color": "black"},
+        ...     links={"width": 1.5, "color": "gray"},
+        ... )
+        >>> m.plot_layout(
+        ...     links={
+        ...         "color": {
+        ...             "by": "result",
+        ...             "variable": "flow",
+        ...             "aggregation": "max",
+        ...             "mode": "continuous",
+        ...         }
+        ...     }
+        ... )
+
+        Returns
+        -------
+        tuple
+            ``(fig, ax)`` for the matplotlib figure and axes.
+
+        Notes
+        -----
+        Layout plots require usable mapped coordinates.  Result-driven styling
+        requires a completed model run.
+        """
+
+        return render_layout(
+            self,
+            legend=legend,
+            grid=grid,
+            title=title,
+            legend_title=legend_title,
+            axis=axis,
+            x_axis_title=x_axis_title,
+            y_axis_title=y_axis_title,
+            save_format=save_format,
+            save_path=save_path,
+            figsize=figsize,
+            dpi=dpi,
+            ax=ax,
+            show=show,
+            nodes=nodes,
+            links=links,
+            subcatchments=subcatchments,
+            rain_gages=rain_gages,
+            labels=labels,
+            link_color_by=link_color_by,
+            link_color_mode=link_color_mode,
+            link_cmap=link_cmap,
+            node_color_result=node_color_result,
+            node_result_aggregation=node_result_aggregation,
+            link_user_data=link_user_data,
+        )
 
     def section(self, name: str):
         """Return tokenized rows for a supported section by name."""

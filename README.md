@@ -11,12 +11,13 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.4` currently provides:
+Version `0.0.5` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
 - structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
 - editable model construction through `m.add.<category>.<element_type>()` and `m.remove.<category>.<element_type>()`
+- matplotlib plotting through `m.plot_layout()`, `m.plot_timeseries.<category>.<sub_category>()`, and `m.plot_profile.*`
 - `m.save()`, `m.run()`, `m.runs()`, `m.validate()`, `m.log()`, and `m.clone()`
 - lazy native-engine loading for bundled Windows/Linux engines plus custom engine paths
 - preserving `.inp` parsing/writing that keeps comments, unknown sections, and section order whenever possible
@@ -119,6 +120,48 @@ Generic fallbacks are also available:
 m.add_element("node", "junction", "J2", invert_elevation=11, max_depth=2)
 m.remove_element("node", "junction", "J2")
 ```
+
+## Plotting
+
+`swmmx` uses matplotlib directly for network maps, result time series, and longitudinal profiles:
+
+```python
+m.plot_layout()
+
+m.plot_layout(
+    title="Drainage Network",
+    legend=True,
+    grid=True,
+    axis=True,
+)
+
+m.plot_layout(
+    links={
+        "color": {
+            "by": "parameter",
+            "category": "conduit",
+            "variable": "roughness",
+            "mode": "continuous",
+            "cmap": "viridis",
+        }
+    }
+)
+
+m.plot_timeseries.link.flow(["C1", "C2"])
+
+m.plot_profile.nodes(
+    "J1",
+    "OUT1",
+    show_hgl=True,
+    aggregation="max",
+)
+```
+
+`m.plot_layout()` draws mapped subcatchments, links, nodes, and rain gages from the model coordinates. Layer dictionaries support ordinary static styling as well as data-driven styling from fixed input parameters, simulation results, or your own ID-to-value mappings. Result-driven styles require a completed run; user-data styles are useful for classes such as risk bands, inspection status, or scenario groups.
+
+`m.plot_timeseries.<category>.<sub_category>()` routes through the result API and plots one or many timestamped series with matplotlib. `m.plot_profile.nodes()`, `.links()`, and `.longest()` build directed hydraulic paths and render geometry-first longitudinal profiles, with HGL/water overlays available after a run.
+
+All plotting calls return `(fig, ax)`, accept `ax=` for composition, and support `save_path=` / `save_format=`. Common errors are explicit: layout plots need coordinates, result-based plots need `m.run()`, invalid IDs raise `UnknownIDError`, and disconnected profile requests raise `NoPathError`.
 
 ## Public parameter catalog
 

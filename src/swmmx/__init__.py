@@ -7,16 +7,22 @@ from .errors import (
     DuplicateIDError,
     EngineLoadError,
     EngineNotFoundError,
+    InvalidPathError,
     InvalidParameterError,
     InvalidReferenceError,
     MissingRequiredParameterError,
     ModelNotRunError,
+    NoPathError,
     NotImplementedYetError,
     ObjectNotFoundError,
+    PlotDataError,
+    PlotError,
     ReadOnlyParameterError,
     SaveError,
     SWMMXError,
+    UnknownCategoryError,
     UnknownIDError,
+    UnknownParameterError,
 )
 
 __all__ = [
@@ -25,18 +31,24 @@ __all__ = [
     "DuplicateIDError",
     "EngineLoadError",
     "EngineNotFoundError",
+    "InvalidPathError",
     "InvalidParameterError",
     "InvalidReferenceError",
     "MissingRequiredParameterError",
     "ModelNotRunError",
+    "NoPathError",
     "NotImplementedYetError",
     "ObjectNotFoundError",
+    "PlotDataError",
+    "PlotError",
     "ReadOnlyParameterError",
     "SaveError",
     "SWMMModel",
     "SWMMXError",
+    "UnknownCategoryError",
     "UnknownIDError",
+    "UnknownParameterError",
     "swmm",
 ]
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
