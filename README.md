@@ -11,7 +11,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.10` currently provides:
+Version `0.0.11` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
