@@ -11,11 +11,12 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.6` currently provides:
+Version `0.0.7` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
 - structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
+- discoverable object counts through `m.count.<main_category>()`, `m.count.model()`, `m.count.model_dict()`, and `m.count.model_df()`
 - editable model construction through `m.add.<category>.<element_type>()` and `m.remove.<category>.<element_type>()`
 - matplotlib plotting through `m.plot_layout()`, `m.plot_timeseries.<category>.<sub_category>()`, and `m.plot_profile.*`
 - external-format export through `m.export.gis()`, `m.export.csv()`, and `m.export.excel()`
@@ -63,6 +64,20 @@ m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
 Supported getters default to NumPy output; `format="df"` gives pandas output. Writable parameters appear in `dir(m.set.<category>)`; attempting to set a derived or result parameter raises a read-only error.
+
+## Counts
+
+```python
+m.count.conduit()
+m.count.node()
+m.count.subcatchment()
+
+total = m.count.model()
+by_type = m.count.model_dict()
+summary = m.count.model_df()
+```
+
+Count helpers take no `ids` or `format` arguments and always reflect the current in-memory model, including unsaved add/remove edits. `m.count.model()` totals detailed element types without double-counting composite rollups such as `node` and `link`; the dictionary and DataFrame summaries expose the detailed counts behind that total.
 
 ## Add and remove elements
 

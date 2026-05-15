@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from difflib import get_close_matches
 import inspect
 import keyword
 import re
@@ -13,11 +14,15 @@ import pandas as pd
 
 from .errors import (
     DimensionMismatchError,
+    FormatError,
     InvalidReferenceError,
     ModelNotRunError,
     NotImplementedYetError,
     ObjectNotFoundError,
     ReadOnlyParameterError,
+    UnknownCategoryError,
+    UnknownIDError,
+    UnknownParameterError,
 )
 
 if TYPE_CHECKING:
@@ -190,17 +195,28 @@ OBJECT_SECTIONS = {
     "subcatchment": ("SUBCATCHMENTS",),
     "junction": ("JUNCTIONS",),
     "outfall": ("OUTFALLS",),
+    "flow_divider": ("DIVIDERS",),
+    "storage_unit": ("STORAGE",),
     "conduit": ("CONDUITS",),
+    "pump": ("PUMPS",),
+    "orifice": ("ORIFICES",),
+    "weir": ("WEIRS",),
+    "outlet": ("OUTLETS",),
     "node": ("JUNCTIONS", "OUTFALLS", "DIVIDERS", "STORAGE"),
     "link": ("CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS"),
     "time_series": ("TIMESERIES",),
     "time_pattern": ("PATTERNS",),
     "curve": ("CURVES",),
+    "transect": ("TRANSECTS",),
+    "street": ("STREETS",),
+    "inlet": ("INLETS",),
     "pollutant": ("POLLUTANTS",),
     "land_use": ("LANDUSES",),
     "aquifer": ("AQUIFERS",),
     "snow_pack": ("SNOWPACKS",),
     "lid_control": ("LID_CONTROLS",),
+    "unit_hydrograph": ("HYDROGRAPHS",),
+    "control_rule": ("CONTROLS",),
 }
 
 RESULT_OBJECT_KIND = {
@@ -281,6 +297,23 @@ class ParameterCatalog:
 
         return sub_api_name in self._subcategories_by_api_name.get(raw_main, {})
 
+    def suggest_category(self, main_api_name: str) -> str | None:
+        """Return the closest public category name, if one is plausible."""
+
+        matches = get_close_matches(main_api_name, self.categories("get"), n=1, cutoff=0.45)
+        return matches[0] if matches else None
+
+    def suggest_subcategory(self, raw_main: str, sub_api_name: str) -> str | None:
+        """Return the closest public parameter name in one category."""
+
+        matches = get_close_matches(
+            sub_api_name,
+            self.subcategories(raw_main, "get"),
+            n=1,
+            cutoff=0.45,
+        )
+        return matches[0] if matches else None
+
 
 class AccessRoot:
     """Root object exposed as ``m.get`` or ``m.set``."""
@@ -309,7 +342,9 @@ class AccessRoot:
 
         catalog = self._model._parameter_catalog
         if not catalog.has_category(category_name):
-            raise AttributeError(category_name)
+            suggestion = catalog.suggest_category(category_name)
+            suffix = f" Did you mean '{suggestion}'?" if suggestion else ""
+            raise UnknownCategoryError(f"Unknown category '{category_name}'.{suffix}")
 
         # This fallback mainly protects callers if a future catalog is mutated
         # after construction.  Store the resolved namespace once so later
@@ -349,7 +384,11 @@ class CategoryAccessor:
 
         catalog = self._model._parameter_catalog
         if not catalog.has_subcategory(self._raw_main_category, subcategory_name):
-            raise AttributeError(subcategory_name)
+            suggestion = catalog.suggest_subcategory(self._raw_main_category, subcategory_name)
+            suffix = f" Did you mean '{suggestion}'?" if suggestion else ""
+            raise UnknownParameterError(
+                f"Unknown parameter '{subcategory_name}' for category '{api_name(self._raw_main_category)}'.{suffix}"
+            )
         spec = catalog.spec(api_name(self._raw_main_category), subcategory_name)
         callable_object = GetterCallable(self._model, spec) if self._mode == "get" else SetterCallable(self._model, spec)
         setattr(self, subcategory_name, callable_object)
@@ -372,6 +411,13 @@ class GetterCallable:
         self._model = model
         self._spec = spec
         self.__name__ = spec.sub_category
+        source_note = ""
+        if spec.source_kind == "result":
+            source_note = (
+                "This is a read-only result variable and requires ``m.run()`` before access.\n"
+            )
+        elif spec.source_kind == "derived":
+            source_note = "This is a read-only derived parameter computed from model data.\n"
         self.__doc__ = (
             f"Get ``{spec.path}``.\n\n"
             "Parameters\n"
@@ -380,6 +426,18 @@ class GetterCallable:
             "    Optional object selector: ``None``, one object ID string, or a list of ID strings.\n"
             "format:\n"
             "    Optional output format: ``'np'`` (default) or ``'df'``.\n"
+            "\nReturns\n"
+            "-------\n"
+            "object\n"
+            "    A scalar for one selected non-time-series ID, otherwise a NumPy array or pandas DataFrame.\n"
+            "\nExamples\n"
+            "--------\n"
+            f">>> m.get.{spec.path}()\n"
+            f">>> m.get.{spec.path}(ids=\"ID\", format=\"df\")\n"
+            "\nNotes\n"
+            "-----\n"
+            "``ids=None`` selects every object in the category.  ``format`` controls the returned container only.\n"
+            f"{source_note}"
         )
 
     def __call__(self, ids=None, format=None):
@@ -412,6 +470,18 @@ class SetterCallable:
             "    Scalar value or one-dimensional list/NumPy array/pandas Series. Scalars broadcast across all selected IDs.\n"
             "ids:\n"
             "    Optional object selector: ``None``, one object ID string, or a list of ID strings.\n"
+            "\nReturns\n"
+            "-------\n"
+            "None\n"
+            "    Values are written into the in-memory model and old results are invalidated.\n"
+            "\nExamples\n"
+            "--------\n"
+            f">>> m.set.{spec.path}(1.0)\n"
+            f">>> m.set.{spec.path}([1.0, 2.0], ids=[\"ID1\", \"ID2\"])\n"
+            "\nNotes\n"
+            "-----\n"
+            "Setters do not accept ``format``.  ``ids=None`` applies the value to every object in the category.\n"
+            "Result and derived parameters are read-only; direct writes raise ``ReadOnlyParameterError``.\n"
         )
 
     def __call__(self, value, ids=None):
@@ -458,8 +528,10 @@ def normalize_ids(ids, available_ids: list[str], category: str) -> tuple[list[st
 
     missing = [object_id for object_id in selected if object_id not in available_ids]
     if missing:
-        joined = ", ".join(missing)
-        raise ObjectNotFoundError(f"Unknown {category} object ID(s): {joined}.")
+        if len(missing) == 1:
+            raise UnknownIDError(f"Unknown {category} ID '{missing[0]}'.")
+        joined = ", ".join(f"'{object_id}'" for object_id in missing)
+        raise UnknownIDError(f"Unknown {category} IDs {joined}.")
     return selected, explicit_single
 
 

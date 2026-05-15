@@ -7,6 +7,7 @@ from .errors import (
     DuplicateIDError,
     EngineLoadError,
     EngineNotFoundError,
+    EngineRunError,
     ExportError,
     ExportGeometryError,
     FormatError,
@@ -19,15 +20,18 @@ from .errors import (
     NotImplementedYetError,
     ObjectNotFoundError,
     OptionalDependencyError,
+    ParseError,
     PlotDataError,
     PlotError,
     ReadOnlyParameterError,
+    ReferenceError,
     SaveError,
     SWMMXError,
     UnknownCategoryError,
     UnknownExportElementError,
     UnknownIDError,
     UnknownParameterError,
+    ValidationError,
 )
 
 __all__ = [
@@ -36,6 +40,7 @@ __all__ = [
     "DuplicateIDError",
     "EngineLoadError",
     "EngineNotFoundError",
+    "EngineRunError",
     "ExportError",
     "ExportGeometryError",
     "FormatError",
@@ -48,9 +53,11 @@ __all__ = [
     "NotImplementedYetError",
     "ObjectNotFoundError",
     "OptionalDependencyError",
+    "ParseError",
     "PlotDataError",
     "PlotError",
     "ReadOnlyParameterError",
+    "ReferenceError",
     "SaveError",
     "SWMMModel",
     "SWMMXError",
@@ -58,7 +65,8 @@ __all__ = [
     "UnknownExportElementError",
     "UnknownIDError",
     "UnknownParameterError",
+    "ValidationError",
     "swmm",
 ]
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"

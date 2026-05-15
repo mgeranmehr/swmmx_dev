@@ -11,10 +11,12 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from .counts import CountRoot
 from .engine import EngineLoader
 from .elements import EditableElementRegistry, EditableElementService, EditableRoot
 from .export import ExportAccessor
 from .errors import (
+    FormatError,
     InvalidReferenceError,
     ModelNotRunError,
     NotImplementedYetError,
@@ -119,6 +121,7 @@ class SWMMModel:
         self.options = OptionView(self)
         self.get = AccessRoot(self, mode="get")
         self.set = AccessRoot(self, mode="set")
+        self.count = CountRoot(self)
         self._editable_service = EditableElementService(self, self._editable_registry)
         self.add = EditableRoot(self, mode="add", registry=self._editable_registry)
         self.remove = EditableRoot(self, mode="remove", registry=self._editable_registry)
@@ -195,23 +198,49 @@ class SWMMModel:
     def _ids_for_category(self, category: str) -> list[str]:
         """Return object IDs for one routed category in deterministic order."""
 
+        if category == "control_rule":
+            return self._control_rule_ids()
+        if category == "transect":
+            return self._transect_ids()
         # Aggregate sections in SWMM's ordinary object-group order for composite
         # categories such as ``node`` and ``link``.
         sections = OBJECT_SECTIONS.get(category)
         if sections is None:
             raise NotImplementedYetError(
-                f"Object indexing for '{category}' is not implemented in version 0.0.6."
+                f"Object indexing for '{category}' is not implemented in version 0.0.7."
             )
         ids: list[str] = []
         for section_name in sections:
             ids.extend(self._document.section_ids(section_name))
         return list(dict.fromkeys(ids))
 
+    def _control_rule_ids(self) -> list[str]:
+        """Return named control-rule IDs from preserved raw control lines."""
+
+        section = self._document.section("CONTROLS")
+        if section is None:
+            return []
+        ids: list[str] = []
+        for line in section.lines:
+            stripped = line.strip()
+            if stripped.lower().startswith("rule "):
+                ids.append(stripped.split(maxsplit=1)[1])
+        return ids
+
+    def _transect_ids(self) -> list[str]:
+        """Return transect IDs from SWMM X1 rows when present."""
+
+        ids: list[str] = []
+        for row in self._document.rows("TRANSECTS"):
+            if len(row) >= 2 and row[0].upper() == "X1":
+                ids.append(row[1])
+        return list(dict.fromkeys(ids))
+
     def _get_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Return one public parameter in the requested shape."""
 
         if format not in {None, "np", "df"}:
-            raise ValueError("Unsupported format. Use 'np' or 'df'.")
+            raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
 
         # Option groups describe one model-level scalar rather than object rows.
         if spec.main_category.startswith("option_"):
@@ -224,7 +253,7 @@ class SWMMModel:
             return self._get_derived_parameter(spec, ids=ids, format=format)
         if spec.source_kind == "mixed":
             raise NotImplementedYetError(
-                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.6."
+                f"'{spec.path}' has mixed source semantics and is not exposed in version 0.0.7."
             )
 
         # User/ref parameters that map directly to ordinary input columns can be
@@ -232,7 +261,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured access for '{spec.path}' is not implemented in version 0.0.6."
+                f"Structured access for '{spec.path}' is not implemented in version 0.0.7."
             )
         available_ids = self._ids_for_category(spec.main_category)
         selected_ids, explicit_single = normalize_ids(ids, available_ids, spec.main_category)
@@ -249,8 +278,9 @@ class SWMMModel:
         """Write one public user/ref parameter."""
 
         if not spec.is_writable:
+            noun = "variable" if spec.source_kind == "result" else "parameter"
             raise ReadOnlyParameterError(
-                f"'{spec.path}' is a {spec.source_kind} parameter and cannot be set directly."
+                f"'{spec.path}' is a {spec.source_kind} {noun} and cannot be set."
             )
         if spec.main_category.startswith("option_"):
             if ids is not None:
@@ -261,7 +291,7 @@ class SWMMModel:
         field = INPUT_FIELDS.get(spec.key)
         if field is None:
             raise NotImplementedYetError(
-                f"Structured setting for '{spec.path}' is not implemented in version 0.0.6."
+                f"Structured setting for '{spec.path}' is not implemented in version 0.0.7."
             )
 
         available_ids = self._ids_for_category(spec.main_category)
@@ -286,7 +316,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.6."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.7."
             )
         value = self._document.get_option(option_key)
         if value is None:
@@ -299,7 +329,7 @@ class SWMMModel:
         option_key = OPTION_FIELDS.get(spec.sub_category)
         if option_key is None:
             raise NotImplementedYetError(
-                f"Option mapping for '{spec.path}' is not implemented in version 0.0.6."
+                f"Option mapping for '{spec.path}' is not implemented in version 0.0.7."
             )
         self._document.set_option(option_key, self._render_set_value(value, spec))
         self._dirty = True
@@ -336,7 +366,7 @@ class SWMMModel:
             return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
 
         raise NotImplementedYetError(
-            f"Derived computation for '{spec.path}' is not implemented in version 0.0.6."
+            f"Derived computation for '{spec.path}' is not implemented in version 0.0.7."
         )
 
     def _get_result_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
@@ -344,14 +374,13 @@ class SWMMModel:
 
         if self._run_timestamps is None or self._last_output_path is None:
             raise ModelNotRunError(
-                f"'{spec.path}' is a result variable. "
-                "Run the model with m.run() or load an output file before accessing it."
+                f"'{spec.path}' is a result variable. Run the model first with m.run()."
             )
 
         object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
         if object_kind is None:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.6."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.7."
             )
 
         if self._output_file_cache is None or self._output_file_cache.path != self._last_output_path:
@@ -360,7 +389,7 @@ class SWMMModel:
             whole_matrix = self._output_file_cache.matrix(object_kind, spec.sub_category)
         except KeyError as exc:
             raise NotImplementedYetError(
-                f"Result access for '{spec.path}' is not implemented in version 0.0.6."
+                f"Result access for '{spec.path}' is not implemented in version 0.0.7."
             ) from exc
 
         # ``conduit`` is a subset of SWMM's broader link result block, while
@@ -380,7 +409,7 @@ class SWMMModel:
             return np.asarray([value])
         if format == "df":
             return pd.DataFrame([[value]], columns=[spec.sub_category])
-        raise ValueError("Unsupported format. Use 'np' or 'df'.")
+        raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
 
     def _format_non_time_values(self, values, selected_ids, explicit_single: bool, *, format=None):
         """Return scalar or one-row containers for non-time-series values."""
@@ -392,7 +421,7 @@ class SWMMModel:
             return np.asarray(values)
         if selected_format == "df":
             return pd.DataFrame([values], columns=selected_ids)
-        raise ValueError("Unsupported format. Use 'np' or 'df'.")
+        raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
 
     def _format_time_values(self, matrix, selected_ids, explicit_single: bool, *, format=None):
         """Return one-dimensional or two-dimensional result values."""
@@ -402,7 +431,7 @@ class SWMMModel:
             return matrix[:, 0] if explicit_single else matrix
         if selected_format == "df":
             return pd.DataFrame(matrix, index=pd.DatetimeIndex(self._run_timestamps, name="time"), columns=selected_ids)
-        raise ValueError("Unsupported format. Use 'np' or 'df'.")
+        raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
 
     def _validate_reference_values(self, field: FieldSpec, values: list[object], spec: ParameterSpec) -> None:
         """Validate refs against known object IDs when the target is known."""
