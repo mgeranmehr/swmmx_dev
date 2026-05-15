@@ -3,18 +3,14 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 
 from .errors import ModelNotRunError
 
 if TYPE_CHECKING:
     from .api import SWMMModel
-
-
-VectorFormat = Literal["np", "df"]
 
 
 class TimeAccessor:
@@ -25,20 +21,20 @@ class TimeAccessor:
 
         self._model = model
 
-    def vector(self, format: VectorFormat | None = None):
-        """Return expected report timestamps before a run.
+    def vector(self) -> pd.DataFrame:
+        """Return expected report timestamps before a run as a DataFrame.
 
-        Parameters
-        ----------
-        format:
-            ``"np"`` (default) returns a NumPy ``datetime64`` vector.
-            ``"df"`` returns a pandas ``DataFrame`` with a timestamp index.
+        Returns
+        -------
+        pandas.DataFrame
+            Empty-column DataFrame whose index is the expected report timestamp
+            vector.  The timestamp index is named ``"time"``.
         """
 
         # The model owns the datetime calculation so the run-time and pre-run
         # accessors use the same rules.
         timestamps = self._model._expected_timestamps()
-        return self._format(timestamps, format)
+        return self._to_frame(timestamps)
 
     def count(self) -> int:
         """Return the expected report-period count before a run."""
@@ -46,31 +42,34 @@ class TimeAccessor:
         # Counting the vector itself avoids a second, subtly different formula.
         return len(self._model._expected_timestamps())
 
-    def vector_run(self, format: VectorFormat | None = None):
-        """Return actual report timestamps after a completed run."""
+    def vector_run(self) -> pd.DataFrame:
+        """Return actual report timestamps after a completed run as a DataFrame."""
 
         if self._model._run_timestamps is None:
-            raise ModelNotRunError("Run-time timestamps are unavailable until the model has been run.")
-        return self._format(self._model._run_timestamps, format)
+            raise ModelNotRunError(
+                "m.time.vector_run() requires completed model results. "
+                "Run the model first with m.run() or iterate m.runs() to completion."
+            )
+        return self._to_frame(self._model._run_timestamps)
 
     def count_run(self) -> int:
         """Return the actual report-period count after a completed run."""
 
         if self._model._run_timestamps is None:
-            raise ModelNotRunError("Run-time timestamps are unavailable until the model has been run.")
+            raise ModelNotRunError(
+                "m.time.count_run() requires completed model results. "
+                "Run the model first with m.run() or iterate m.runs() to completion."
+            )
         return len(self._model._run_timestamps)
 
     @staticmethod
-    def _format(timestamps, format: VectorFormat | None):
-        """Render one timestamp sequence in the requested public format."""
+    def _to_frame(timestamps) -> pd.DataFrame:
+        """Render one timestamp sequence as the public DataFrame format."""
 
-        selected = "np" if format is None else format
-        if selected == "np":
-            return np.asarray(timestamps, dtype="datetime64[ns]")
-        if selected == "df":
-            index = pd.DatetimeIndex(timestamps, name="time")
-            return pd.DataFrame(index=index)
-        raise ValueError("Unsupported time vector format. Use 'np' or 'df'.")
+        # Timestamp indices are the most natural pandas representation for time
+        # series and keep later result tables ready for aligned joins.
+        index = pd.DatetimeIndex(timestamps, name="time")
+        return pd.DataFrame(index=index)
 
 
 def build_timestamps(report_start, end, report_step, periods: int | None = None):
@@ -104,4 +103,3 @@ def parse_duration(value: str) -> timedelta:
         raise ValueError(f"Invalid SWMM duration '{value}'. Expected HH:MM:SS.")
     hours, minutes, seconds = (int(float(part)) for part in parts)
     return timedelta(hours=hours, minutes=minutes, seconds=seconds)
-

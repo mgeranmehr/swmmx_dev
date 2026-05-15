@@ -1,5 +1,6 @@
 include README.md
 include LICENSE
 include parameters.csv
+recursive-include example *.inp
 recursive-include src/swmmx/bin *
 recursive-include src/swmmx/schemas *.csv

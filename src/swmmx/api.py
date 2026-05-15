@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
-from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
 import tempfile
 from typing import Literal
 
 from .engine import EngineLoader
-from .errors import ModelNotRunError, NotImplementedYetError
+from .errors import NotImplementedYetError
 from .inp import InpDocument
 from .models import RunResult, SimulationStep, ValidationResult
 from .results import OutputSummary
@@ -257,10 +256,16 @@ class SWMMModel:
     def clone(self) -> "SWMMModel":
         """Return an independent clone of the current model state."""
 
-        clone = self.__class__(
+        # Public ``swmm`` construction now parses human-facing constructor
+        # arguments, so cloning bypasses that path and copies the already-built
+        # internal document directly.
+        clone = self.__class__.__new__(self.__class__)
+        SWMMModel.__init__(
+            clone,
             self._document.copy(),
             source_path=self._source_path,
             engine_path=self._engine_loader.custom_path,
+            schema_path=self.schema.path,
         )
         clone._dirty = self._dirty
         return clone
@@ -294,81 +299,104 @@ class SWMMModel:
 
 
 class swmm(SWMMModel):
-    """Public model class used as ``from swmmx import swmm``."""
+    """Create or open an EPA SWMM model.
 
-    @classmethod
-    def open(
-        cls,
-        path: str | Path,
-        *,
-        engine_path: str | Path | None = None,
-        schema_path: str | Path | None = None,
-    ) -> "swmm":
-        """Open an existing EPA SWMM input file.
+    Parameters
+    ----------
+    path:
+        Optional path to an existing EPA SWMM ``.inp`` file.  When ``path`` is
+        supplied, ``new`` and ``flow_unit`` must be omitted because the input
+        file already defines the model and its unit system.
+    new:
+        Optional unit system for a newly-created model.  Use ``"SI"`` or
+        ``"US"``.  If both ``path`` and ``new`` are omitted, ``"SI"`` is used.
+    flow_unit:
+        Optional flow unit for a new model only.  SI models accept ``"LPS"``
+        (default), ``"CMS"``, or ``"MLD"``.  US models accept ``"CFS"``
+        (default), ``"GPM"``, or ``"MGD"``.
+    custom_dll_path:
+        Optional path to a custom native SWMM engine library.  If omitted,
+        ``swmmx`` lazily loads the bundled platform engine when a run begins.
+
+    Examples
+    --------
+    >>> m = swmm("example/example.inp")
+    >>> m = swmm()
+    >>> m = swmm(new="SI", flow_unit="CMS")
+    >>> m = swmm(new="US", flow_unit="GPM")
+    """
+
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        new: Literal["SI", "US"] | str | None = None,
+        flow_unit: Literal["LPS", "CMS", "MLD", "CFS", "GPM", "MGD"] | str | None = None,
+        custom_dll_path: str | Path | None = None,
+    ) -> None:
+        """Build a model from either an input path or new-model settings.
 
         Parameters
         ----------
         path:
-            Path to an existing ``.inp`` file.
-        engine_path:
-            Optional custom native SWMM library path.  If omitted, the bundled
-            platform engine is loaded lazily when ``run`` or ``runs`` is called.
-        schema_path:
-            Optional path to a ``parameters.csv`` schema registry.
+            Optional path to an existing EPA SWMM ``.inp`` file.  When ``path``
+            is supplied, ``new`` and ``flow_unit`` must not be supplied.
+        new:
+            Optional unit system for a new model: ``"SI"`` or ``"US"``.  If no
+            ``path`` and no ``new`` value are supplied, ``"SI"`` is used.
+        flow_unit:
+            Optional flow unit for new models only.  SI models accept ``"LPS"``
+            (default), ``"CMS"``, and ``"MLD"``.  US models accept ``"CFS"``
+            (default), ``"GPM"``, and ``"MGD"``.
+        custom_dll_path:
+            Optional path to a custom SWMM engine library.  If omitted, the
+            bundled platform engine is loaded lazily when execution begins.
         """
 
-        source = Path(path).expanduser().resolve()
-        document = InpDocument.from_path(source)
-        return cls(document, source_path=source, engine_path=engine_path, schema_path=schema_path)
+        # Opening an existing model and creating a new one are deliberately
+        # mutually exclusive operations, so mixed instructions fail early.
+        if path is not None and new is not None:
+            raise ValueError(
+                "Use either 'path' to open an existing model or 'new' to create one, not both."
+            )
+        if path is not None and flow_unit is not None:
+            raise ValueError(
+                "'flow_unit' is only valid for new models. "
+                "When opening an existing .inp file, its FLOW_UNITS option is used."
+            )
 
-    @classmethod
-    def new_SI(
-        cls,
-        flow_unit_SI: Literal["LPS", "CMS", "MLD"] = "LPS",
-        *,
-        engine_path: str | Path | None = None,
-        schema_path: str | Path | None = None,
-    ) -> "swmm":
-        """Create a new SI model.
+        if path is not None:
+            source = Path(path).expanduser().resolve()
+            if not source.exists():
+                raise FileNotFoundError(f"SWMM input file not found: '{source}'.")
+            if not source.is_file():
+                raise ValueError(f"SWMM input path must be a file, not a directory: '{source}'.")
+            if source.suffix.lower() != ".inp":
+                raise ValueError(f"SWMM input path must point to a '.inp' file: '{source}'.")
+            document = InpDocument.from_path(source)
+            super().__init__(
+                document,
+                source_path=source,
+                engine_path=custom_dll_path,
+            )
+            return
 
-        Parameters
-        ----------
-        flow_unit_SI:
-            SI flow unit.  Allowed values are ``"LPS"`` (default), ``"CMS"``,
-            and ``"MLD"``.
-        """
+        # With no file path, build a fresh model.  The unit system defaults to
+        # SI so ``swmm()`` is a complete and useful constructor call.
+        selected_system = "SI" if new is None else str(new).upper()
+        if selected_system not in {"SI", "US"}:
+            raise ValueError("'new' must be either 'SI' or 'US' when creating a new model.")
 
-        selected = flow_unit_SI.upper()
-        if selected not in FLOW_UNITS_SI:
-            raise ValueError(f"Invalid SI flow unit '{flow_unit_SI}'. Use one of {sorted(FLOW_UNITS_SI)}.")
-        return cls(
-            InpDocument.from_template(selected),
-            engine_path=engine_path,
-            schema_path=schema_path,
-        )
+        allowed_units = FLOW_UNITS_SI if selected_system == "SI" else FLOW_UNITS_US
+        default_unit = "LPS" if selected_system == "SI" else "CFS"
+        selected_unit = default_unit if flow_unit is None else str(flow_unit).upper()
+        if selected_unit not in allowed_units:
+            allowed = ", ".join(sorted(allowed_units))
+            raise ValueError(
+                f"Invalid flow_unit '{flow_unit}' for a new {selected_system} model. "
+                f"Use one of: {allowed}."
+            )
 
-    @classmethod
-    def new_US(
-        cls,
-        flow_unit_US: Literal["CFS", "GPM", "MGD"] = "CFS",
-        *,
-        engine_path: str | Path | None = None,
-        schema_path: str | Path | None = None,
-    ) -> "swmm":
-        """Create a new US-customary model.
-
-        Parameters
-        ----------
-        flow_unit_US:
-            US-customary flow unit.  Allowed values are ``"CFS"`` (default),
-            ``"GPM"``, and ``"MGD"``.
-        """
-
-        selected = flow_unit_US.upper()
-        if selected not in FLOW_UNITS_US:
-            raise ValueError(f"Invalid US flow unit '{flow_unit_US}'. Use one of {sorted(FLOW_UNITS_US)}.")
-        return cls(
-            InpDocument.from_template(selected),
-            engine_path=engine_path,
-            schema_path=schema_path,
+        super().__init__(
+            InpDocument.from_template(selected_unit),
+            engine_path=custom_dll_path,
         )
