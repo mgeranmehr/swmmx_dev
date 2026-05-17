@@ -1,5 +1,5 @@
 <div align="center" style="max-width:500px;margin: auto;">
-  <img src="https://github.com/mgeranmehr/swmmx_dev/tree/main/swmmx_logo.png"><br>
+  <img src="https://github.com/mgeranmehr/mgeranmehr.github.io/blob/main/swmmx_logo.png"><br>
 </div>
 
 [![License](https://img.shields.io/pypi/l/swmmx.svg)](https://github.com/mgeranmehr/swmmx_dev/blob/main/LICENSE)
@@ -19,7 +19,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.13` currently provides:
+Version `0.0.14` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
