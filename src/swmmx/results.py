@@ -143,7 +143,7 @@ class OutputFile:
         # Each record starts with an 8-byte datetime, followed by 32-bit floats.
         return 8 + 4 * self.period_float_count
 
-    def matrix(self, object_kind: str, variable: str) -> np.ndarray:
+    def matrix(self, object_kind: str, variable: str, pollutant_index: int | None = None) -> np.ndarray:
         """Return one result variable as ``periods × objects`` float matrix."""
 
         variable_map = {
@@ -151,10 +151,17 @@ class OutputFile:
             "node": self.NODE_VARIABLES,
             "link": self.LINK_VARIABLES,
         }
-        if object_kind not in variable_map or variable not in variable_map[object_kind]:
+        if object_kind not in variable_map:
             raise KeyError(f"Unsupported output result '{object_kind}.{variable}'.")
-
-        variable_index = variable_map[object_kind][variable]
+        if variable == "pollutant_concentration":
+            if pollutant_index is None or pollutant_index < 0 or pollutant_index >= self.header.pollutants:
+                raise KeyError(f"Unsupported pollutant result index '{pollutant_index}'.")
+            base_counts = {"subcatchment": 8, "node": 6, "link": 5}
+            variable_index = base_counts[object_kind] + pollutant_index
+        else:
+            if variable not in variable_map[object_kind]:
+                raise KeyError(f"Unsupported output result '{object_kind}.{variable}'.")
+            variable_index = variable_map[object_kind][variable]
         if object_kind == "subcatchment":
             count = self.header.subcatchments
             result_count = self.subcatchment_result_count

@@ -19,7 +19,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.15` currently provides:
+Version `0.0.16` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -83,7 +83,7 @@ m.set.conduit.roughness(0.013)
 m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
-Supported getters default to NumPy output; `format="df"` gives pandas output. `dir(m.get.<category>)` and `dir(m.set.<category>)` show the functions that are implemented in the installed build. Attempting to set a derived or result parameter raises a read-only error, and requesting an object collection that is absent from the model raises a clear missing-object error.
+Supported getters default to NumPy output; `format="df"` gives pandas output. `dir(m.get.<category>)` now exposes the full declared parameter surface, including input fields, attached records, derived values, and result variables. `dir(m.set.<category>)` exposes the full editable surface. Attempting to set a derived or result parameter raises a read-only error, and requesting an object collection that is absent from the model raises a clear missing-object error.
 
 ## Counts
 

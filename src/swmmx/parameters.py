@@ -110,6 +110,8 @@ class FieldSpec:
     field_index: int
     id_index: int = 0
     reference_target: str | None = None
+    key_indexes: tuple[int, ...] | None = None
+    multirow: bool = False
 
 
 OPTION_FIELDS = {
@@ -204,6 +206,367 @@ INPUT_FIELDS = {
     ("outfall", "invert_elevation"): FieldSpec("OUTFALLS", 1),
 }
 
+
+def _extend_input_fields() -> None:
+    """Populate ordinary table-backed fields from compact section layouts."""
+
+    # The first release hand-wrote only the fields needed by the initial
+    # examples.  A comprehensive API is easier to keep correct when ordinary
+    # section layouts live in one declarative map and generate the repetitive
+    # field routes below.
+    layouts: dict[str, tuple[str, tuple[str, ...], tuple[int, ...]]] = {
+        "flow_divider": (
+            "DIVIDERS",
+            (
+                "id",
+                "invert_elevation",
+                "diverted_link",
+                "type",
+                "cutoff_flow",
+                "diversion_curve",
+                "weir_height",
+                "weir_coefficient",
+                "max_depth",
+                "initial_depth",
+                "surcharge_depth",
+                "ponded_area",
+            ),
+            (0,),
+        ),
+        "storage_unit": (
+            "STORAGE",
+            (
+                "id",
+                "invert_elevation",
+                "max_depth",
+                "initial_depth",
+                "storage_curve_type",
+                "storage_curve",
+                "area",
+                "area_coefficient",
+                "area_exponent",
+                "area_constant",
+                "evaporation_factor",
+                "seepage_loss",
+            ),
+            (0,),
+        ),
+        "pump": (
+            "PUMPS",
+            ("id", "from_node", "to_node", "curve", "initial_status", "startup_depth", "shutoff_depth"),
+            (0,),
+        ),
+        "orifice": (
+            "ORIFICES",
+            (
+                "id",
+                "from_node",
+                "to_node",
+                "type",
+                "offset",
+                "discharge_coefficient",
+                "flap_gate",
+                "open_close_time",
+            ),
+            (0,),
+        ),
+        "weir": (
+            "WEIRS",
+            (
+                "id",
+                "from_node",
+                "to_node",
+                "type",
+                "crest_height",
+                "discharge_coefficient",
+                "flap_gate",
+                "end_contractions",
+                "end_coefficient",
+                "surcharge",
+                "road_width",
+                "road_surface",
+            ),
+            (0,),
+        ),
+        "outlet": (
+            "OUTLETS",
+            ("id", "from_node", "to_node", "offset", "rating_type", "curve", "exponent", "flap_gate"),
+            (0,),
+        ),
+        "street": (
+            "STREETS",
+            ("id", "crown_width", "curb_height", "cross_slope", "roughness", "depression_storage", "gutter_width", "gutter_slope"),
+            (0,),
+        ),
+        "inlet": (
+            "INLETS",
+            ("id", "type", "grate_length", "grate_width", "grate_type", "curb_length", "curb_height", "slotted_length", "slotted_width"),
+            (0,),
+        ),
+        "aquifer": (
+            "AQUIFERS",
+            (
+                "id",
+                "porosity",
+                "wilting_point",
+                "field_capacity",
+                "conductivity",
+                "conductivity_slope",
+                "tension_slope",
+                "upper_evaporation_fraction",
+                "lower_evaporation_depth",
+                "lower_groundwater_loss_rate",
+                "bottom_elevation",
+                "water_table_elevation",
+                "unsaturated_moisture",
+                "upper_evaporation_pattern",
+            ),
+            (0,),
+        ),
+        "pollutant": (
+            "POLLUTANTS",
+            (
+                "id",
+                "units",
+                "rain_concentration",
+                "groundwater_concentration",
+                "rdii_concentration",
+                "decay_coefficient",
+                "snow_only",
+                "co_pollutant",
+                "co_pollutant_fraction",
+                "dry_weather_flow_concentration",
+                "initial_concentration",
+            ),
+            (0,),
+        ),
+        "land_use": (
+            "LANDUSES",
+            ("id", "sweeping_interval", "sweeping_availability", "last_swept"),
+            (0,),
+        ),
+        "coverage": ("COVERAGES", ("subcatchment", "land_use", "percent"), (0, 1)),
+        "loading": ("LOADINGS", ("subcatchment", "pollutant", "initial_buildup"), (0, 1)),
+        "buildup": (
+            "BUILDUP",
+            ("land_use", "pollutant", "function", "maximum_buildup", "rate_constant", "power", "normalizer"),
+            (0, 1),
+        ),
+        "washoff": (
+            "WASHOFF",
+            ("land_use", "pollutant", "function", "coefficient", "exponent", "cleaning_efficiency", "bmp_efficiency"),
+            (0, 1),
+        ),
+        "treatment": ("TREATMENT", ("node", "pollutant", "expression"), (0, 1)),
+        "groundwater": (
+            "GROUNDWATER",
+            (
+                "subcatchment",
+                "aquifer",
+                "node",
+                "surface_elevation",
+                "a1",
+                "b1",
+                "a2",
+                "b2",
+                "a3",
+                "fixed_depth",
+                "threshold_elevation",
+                "lateral_flow_equation",
+                "deep_flow_equation",
+            ),
+            (0,),
+        ),
+        "inlet_usage": (
+            "INLET_USAGE",
+            ("node", "inlet", "conduit", "number", "clogging_factor", "flow_restriction"),
+            (0, 1, 2),
+        ),
+        "lid_usage": (
+            "LID_USAGE",
+            (
+                "subcatchment",
+                "lid_control",
+                "number",
+                "area",
+                "width",
+                "initial_saturation",
+                "from_impervious_percent",
+                "outlet",
+                "drain_to",
+                "from_pervious_percent",
+            ),
+            (0, 1),
+        ),
+        "external_inflow": (
+            "INFLOWS",
+            ("node", "constituent", "time_series", "type", "units_factor", "scale_factor", "baseline", "pattern"),
+            (0, 1),
+        ),
+        "dry_weather_flow": (
+            "DWF",
+            ("node", "constituent", "average_value", "monthly_pattern", "daily_pattern", "hourly_pattern", "weekend_pattern"),
+            (0, 1),
+        ),
+        "rdii": ("RDII", ("node", "unit_hydrograph", "sewer_area"), (0,)),
+        "time_pattern": ("PATTERNS", ("id", "type"), (0,)),
+        "unit_hydrograph": (
+            "HYDROGRAPHS",
+            (
+                "id",
+                "rain_gage",
+                "month",
+                "short_term_r",
+                "short_term_t",
+                "short_term_k",
+                "medium_term_r",
+                "medium_term_t",
+                "medium_term_k",
+                "long_term_r",
+                "long_term_t",
+                "long_term_k",
+            ),
+            (0, 2),
+        ),
+    }
+    references = {
+        ("pump", "from_node"): "node",
+        ("pump", "to_node"): "node",
+        ("pump", "curve"): "curve",
+        ("orifice", "from_node"): "node",
+        ("orifice", "to_node"): "node",
+        ("weir", "from_node"): "node",
+        ("weir", "to_node"): "node",
+        ("outlet", "from_node"): "node",
+        ("outlet", "to_node"): "node",
+        ("outlet", "curve"): "curve",
+        ("aquifer", "upper_evaporation_pattern"): "time_pattern",
+        ("coverage", "subcatchment"): "subcatchment",
+        ("coverage", "land_use"): "land_use",
+        ("loading", "subcatchment"): "subcatchment",
+        ("loading", "pollutant"): "pollutant",
+        ("buildup", "land_use"): "land_use",
+        ("buildup", "pollutant"): "pollutant",
+        ("washoff", "land_use"): "land_use",
+        ("washoff", "pollutant"): "pollutant",
+        ("treatment", "node"): "node",
+        ("treatment", "pollutant"): "pollutant",
+        ("groundwater", "subcatchment"): "subcatchment",
+        ("groundwater", "aquifer"): "aquifer",
+        ("groundwater", "node"): "node",
+        ("inlet_usage", "node"): "node",
+        ("inlet_usage", "inlet"): "inlet",
+        ("inlet_usage", "conduit"): "conduit",
+        ("lid_usage", "subcatchment"): "subcatchment",
+        ("lid_usage", "lid_control"): "lid_control",
+        ("lid_usage", "drain_to"): "subcatchment",
+        ("external_inflow", "node"): "node",
+        ("external_inflow", "time_series"): "time_series",
+        ("external_inflow", "pattern"): "time_pattern",
+        ("dry_weather_flow", "node"): "node",
+        ("dry_weather_flow", "monthly_pattern"): "time_pattern",
+        ("dry_weather_flow", "daily_pattern"): "time_pattern",
+        ("dry_weather_flow", "hourly_pattern"): "time_pattern",
+        ("dry_weather_flow", "weekend_pattern"): "time_pattern",
+        ("rdii", "node"): "node",
+        ("rdii", "unit_hydrograph"): "unit_hydrograph",
+        ("unit_hydrograph", "rain_gage"): "rain_gage",
+    }
+    for category, (section, fields, key_indexes) in layouts.items():
+        for field_index, field_name in enumerate(fields):
+            INPUT_FIELDS.setdefault(
+                (category, field_name),
+                FieldSpec(
+                    section,
+                    field_index,
+                    id_index=key_indexes[0],
+                    reference_target=references.get((category, field_name)),
+                    key_indexes=key_indexes,
+                    multirow=category in {"unit_hydrograph"},
+                ),
+            )
+
+    INPUT_FIELDS.update(
+        {
+            ("rain_gage", "filename"): FieldSpec("RAINGAGES", 5),
+            ("rain_gage", "station"): FieldSpec("RAINGAGES", 6),
+            ("rain_gage", "units"): FieldSpec("RAINGAGES", 7),
+            ("subcatchment", "tag"): FieldSpec("TAGS", 2, id_index=1, key_indexes=(1,)),
+            ("infiltration_horton", "maximum_rate"): FieldSpec("INFILTRATION", 1),
+            ("infiltration_horton", "minimum_rate"): FieldSpec("INFILTRATION", 2),
+            ("infiltration_horton", "decay"): FieldSpec("INFILTRATION", 3),
+            ("infiltration_horton", "dry_time"): FieldSpec("INFILTRATION", 4),
+            ("infiltration_horton", "maximum_volume"): FieldSpec("INFILTRATION", 5),
+            ("infiltration_green_ampt", "suction_head"): FieldSpec("INFILTRATION", 1),
+            ("infiltration_green_ampt", "hydraulic_conductivity"): FieldSpec("INFILTRATION", 2),
+            ("infiltration_green_ampt", "initial_moisture_deficit"): FieldSpec("INFILTRATION", 3),
+            ("infiltration_curve_number", "curve_number"): FieldSpec("INFILTRATION", 1),
+            ("infiltration_curve_number", "conductivity"): FieldSpec("INFILTRATION", 2),
+            ("infiltration_curve_number", "dry_time"): FieldSpec("INFILTRATION", 3),
+            ("outfall", "type"): FieldSpec("OUTFALLS", 2),
+            ("outfall", "fixed_stage"): FieldSpec("OUTFALLS", 3),
+            ("outfall", "tidal_curve"): FieldSpec("OUTFALLS", 3, reference_target="curve"),
+            ("outfall", "time_series"): FieldSpec("OUTFALLS", 3, reference_target="time_series"),
+            ("outfall", "tide_gate"): FieldSpec("OUTFALLS", 4),
+            ("outfall", "route_to"): FieldSpec("OUTFALLS", 5, reference_target="subcatchment"),
+            ("conduit", "shape"): FieldSpec("XSECTIONS", 1),
+            ("conduit", "barrels"): FieldSpec("XSECTIONS", 6),
+            ("conduit", "culvert_code"): FieldSpec("XSECTIONS", 7),
+            ("conduit", "entry_loss"): FieldSpec("LOSSES", 1),
+            ("conduit", "exit_loss"): FieldSpec("LOSSES", 2),
+            ("conduit", "average_loss"): FieldSpec("LOSSES", 3),
+            ("conduit", "flap_gate"): FieldSpec("LOSSES", 4),
+            ("conduit", "seepage_rate"): FieldSpec("LOSSES", 5),
+            ("cross_section", "link"): FieldSpec("XSECTIONS", 0, reference_target="link"),
+            ("cross_section", "shape_curve"): FieldSpec("XSECTIONS", 2, reference_target="curve"),
+            ("orifice", "shape"): FieldSpec("XSECTIONS", 1),
+            ("orifice", "height"): FieldSpec("XSECTIONS", 2),
+            ("orifice", "width"): FieldSpec("XSECTIONS", 3),
+            ("weir", "length"): FieldSpec("WEIRS", 6),
+            ("weir", "side_slope"): FieldSpec("WEIRS", 7),
+            ("outlet", "coefficient"): FieldSpec("OUTLETS", 5),
+            ("lid_control", "id"): FieldSpec("LID_CONTROLS", 0),
+            ("lid_control", "type"): FieldSpec("LID_CONTROLS", 1),
+            ("curve", "id"): FieldSpec("CURVES", 0, multirow=True),
+            ("curve", "type"): FieldSpec("CURVES", 1, multirow=True),
+            ("curve", "x"): FieldSpec("CURVES", 2, multirow=True),
+            ("curve", "y"): FieldSpec("CURVES", 3, multirow=True),
+            ("time_series", "id"): FieldSpec("TIMESERIES", 0, multirow=True),
+            ("time_series", "filename"): FieldSpec("TIMESERIES", 2, multirow=True),
+            ("lid_surface", "storage_depth"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_surface", "vegetation_fraction"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_surface", "roughness"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_surface", "slope"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_surface", "side_slope"): FieldSpec("LID_CONTROLS", 6),
+            ("lid_pavement", "thickness"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_pavement", "void_ratio"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_pavement", "impervious_surface_fraction"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_pavement", "permeability"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_pavement", "clogging_factor"): FieldSpec("LID_CONTROLS", 6),
+            ("lid_soil", "thickness"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_soil", "porosity"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_soil", "field_capacity"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_soil", "wilting_point"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_soil", "conductivity"): FieldSpec("LID_CONTROLS", 6),
+            ("lid_soil", "conductivity_slope"): FieldSpec("LID_CONTROLS", 7),
+            ("lid_soil", "suction_head"): FieldSpec("LID_CONTROLS", 8),
+            ("lid_storage", "height"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_storage", "void_ratio"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_storage", "seepage_rate"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_storage", "clogging_factor"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_drain", "coefficient"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_drain", "exponent"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_drain", "offset_height"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_drain", "delay"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_drain", "open_level"): FieldSpec("LID_CONTROLS", 6),
+            ("lid_drain", "closed_level"): FieldSpec("LID_CONTROLS", 7),
+            ("lid_drain", "control_curve"): FieldSpec("LID_CONTROLS", 8, reference_target="curve"),
+        }
+    )
+
+
+_extend_input_fields()
+
 OBJECT_SECTIONS = {
     "rain_gage": ("RAINGAGES",),
     "subcatchment": ("SUBCATCHMENTS",),
@@ -230,8 +593,40 @@ OBJECT_SECTIONS = {
     "aquifer": ("AQUIFERS",),
     "snow_pack": ("SNOWPACKS",),
     "lid_control": ("LID_CONTROLS",),
+    "lid_surface": ("LID_CONTROLS",),
+    "lid_pavement": ("LID_CONTROLS",),
+    "lid_soil": ("LID_CONTROLS",),
+    "lid_storage": ("LID_CONTROLS",),
+    "lid_drain": ("LID_CONTROLS",),
     "unit_hydrograph": ("HYDROGRAPHS",),
     "control_rule": ("CONTROLS",),
+    "coverage": ("COVERAGES",),
+    "loading": ("LOADINGS",),
+    "buildup": ("BUILDUP",),
+    "washoff": ("WASHOFF",),
+    "treatment": ("TREATMENT",),
+    "groundwater": ("GROUNDWATER",),
+    "inlet_usage": ("INLET_USAGE",),
+    "lid_usage": ("LID_USAGE",),
+    "external_inflow": ("INFLOWS",),
+    "dry_weather_flow": ("DWF",),
+    "rdii": ("RDII",),
+    "infiltration_horton": ("INFILTRATION",),
+    "infiltration_green_ampt": ("INFILTRATION",),
+    "infiltration_curve_number": ("INFILTRATION",),
+}
+
+CATEGORY_KEY_INDEXES = {
+    "coverage": (0, 1),
+    "loading": (0, 1),
+    "buildup": (0, 1),
+    "washoff": (0, 1),
+    "treatment": (0, 1),
+    "inlet_usage": (0, 1, 2),
+    "lid_usage": (0, 1),
+    "external_inflow": (0, 1),
+    "dry_weather_flow": (0, 1),
+    "unit_hydrograph": (0, 2),
 }
 
 RESULT_OBJECT_KIND = {
@@ -241,6 +636,10 @@ RESULT_OBJECT_KIND = {
     "conduit": "link",
     "junction": "node",
     "outfall": "node",
+    "pump": "link",
+    "orifice": "link",
+    "weir": "link",
+    "outlet": "link",
 }
 
 RESULT_VARIABLES = {
@@ -315,7 +714,7 @@ class ParameterCatalog:
         names: list[str] = []
         for main_api, raw_main in self._categories_by_api_name.items():
             specs = [spec for spec in self._specs.values() if spec.main_category == raw_main]
-            if any(self.is_supported(spec, mode) for spec in specs):
+            if mode == "get" or any(spec.is_writable for spec in specs):
                 names.append(main_api)
         return sorted(names)
 
@@ -325,7 +724,7 @@ class ParameterCatalog:
         names: list[str] = []
         for sub_api, raw_sub in self._subcategories_by_api_name[raw_main].items():
             spec = self._specs[(raw_main, raw_sub)]
-            if self.is_supported(spec, mode):
+            if mode == "get" or spec.is_writable:
                 names.append(sub_api)
         return sorted(names)
 
@@ -646,7 +1045,14 @@ def normalize_values(value, selected_count: int, category: str) -> list[Any]:
     elif isinstance(value, pd.Series):
         values = value.tolist()
     elif isinstance(value, (list, tuple)):
-        values = list(value)
+        # One selected object may legitimately receive a structured value such
+        # as a coordinate pair, conduit geometry tuple, polygon point list, or
+        # an empty attached-record list.  Treat those as one scalar payload
+        # unless the caller supplied the conventional one-item broadcast form.
+        if selected_count == 1 and len(value) != 1:
+            values = [value]
+        else:
+            values = list(value)
     else:
         values = [value] * selected_count
 
