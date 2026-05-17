@@ -19,7 +19,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.19` currently provides:
+Version `0.0.20` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -248,6 +248,8 @@ m.plot_profile.nodes(
 `m.plot_timeseries.<category>.<sub_category>()` routes through the result API and plots one or many timestamped series with matplotlib. `m.plot_profile.nodes()`, `.links()`, and `.longest()` build directed hydraulic paths and render geometry-first longitudinal profiles, with HGL/water overlays available after a run.
 
 All plotting calls return `(fig, ax)`, accept `ax=` for composition, and support `save_path=` / `save_format=`. Common errors are explicit: layout plots need coordinates, result-based plots need `m.run()`, invalid IDs raise `UnknownIDError`, and disconnected profile requests raise `NoPathError`.
+
+For a complete plotting reference, see [`examples/15_all_plot_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/15_all_plot_functions.ipynb). It documents every plotting endpoint, every input and default, all dynamic time-series variables, layout layer/style dictionaries, profile controls, outputs, save behavior, and common validation errors.
 
 ## Export
 

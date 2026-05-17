@@ -18,6 +18,7 @@ GET_NOTEBOOK = ROOT / "examples" / "11_all_get_functions.ipynb"
 SET_NOTEBOOK = ROOT / "examples" / "12_all_set_functions.ipynb"
 ADD_NOTEBOOK = ROOT / "examples" / "13_all_add_functions.ipynb"
 REMOVE_NOTEBOOK = ROOT / "examples" / "14_all_remove_functions.ipynb"
+PLOT_NOTEBOOK = ROOT / "examples" / "15_all_plot_functions.ipynb"
 
 
 CATEGORY_GROUPS = [
@@ -158,6 +159,19 @@ def _escape(value: object) -> str:
 
     text = str(value or "—")
     return text.replace("|", "\\|").replace("\n", "<br>")
+
+
+
+def _table(headers: list[str], rows: list[list[object]]) -> str:
+    """Return one compact Markdown table."""
+
+    lines = [
+        "| " + " | ".join(headers) + " |",
+        "| " + " | ".join("---" for _ in headers) + " |",
+    ]
+    for row in rows:
+        lines.append("| " + " | ".join(_escape(value) for value in row) + " |")
+    return "\n".join(lines)
 
 
 def _grouped_categories(all_categories: Iterable[str]) -> list[tuple[str, list[str]]]:
@@ -775,6 +789,298 @@ def _remove_notebook() -> dict:
     return _notebook(cells)
 
 
+def _plot_timeseries_catalog(model) -> str:
+    """Build the complete dynamic time-series variable catalog."""
+
+    rows: list[list[object]] = []
+    for category_name in dir(model.plot_timeseries):
+        variables = list(dir(getattr(model.plot_timeseries, category_name)))
+        selector = (
+            "System-wide series; `ids` is not needed"
+            if category_name == "system"
+            else "`ids=None`, one ID string, or a list of ID strings"
+        )
+        first_variable = variables[0] if variables else "<variable>"
+        rows.append(
+            [
+                f"`{category_name}`",
+                ", ".join(f"`{variable}`" for variable in variables),
+                selector,
+                f"`m.plot_timeseries.{category_name}.{first_variable}(...)`",
+            ]
+        )
+    return _table(
+        ["Category", "Available variables", "ID behavior", "Example endpoint"],
+        rows,
+    )
+
+
+def _plot_notebook(model) -> dict:
+    """Build the complete plotting-reference notebook."""
+
+    layout_options = [
+        ["`legend`", "`bool`", "`True`", "Show ordinary layer legend entries."],
+        ["`grid`", "`bool`", "`False`", "Show grid lines when axes are visible."],
+        ["`title`", "`str | None`", "`None`", "Optional plot title."],
+        ["`legend_title`", "`str | None`", "`None`", "Optional legend title."],
+        ["`axis`", "`bool`", "`False`", "Show coordinate axes and ticks; hidden by default for maps."],
+        ["`x_axis_title`", "`str | None`", "`None`", "Optional x-axis title when `axis=True`."],
+        ["`y_axis_title`", "`str | None`", "`None`", "Optional y-axis title when `axis=True`."],
+        ["`save_format`", "`str | None`", "`None`", "Optional save format: png, jpg, jpeg, pdf, svg, or tiff."],
+        ["`save_path`", "`str | Path | None`", "`None`", "Optional file path or existing folder target."],
+        ["`figsize`", "`tuple[float, float]`", "`(10, 8)`", "Figure size when `ax` is not supplied."],
+        ["`dpi`", "`int`", "`300`", "Figure resolution for new figures and saved output."],
+        ["`ax`", "matplotlib `Axes | None`", "`None`", "Draw into existing axes when supplied."],
+        ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
+        ["`nodes`", "`dict | bool | None`", "`None`", "Node-layer styling dictionary or visibility flag."],
+        ["`links`", "`dict | bool | None`", "`None`", "Link-layer styling dictionary or visibility flag."],
+        ["`subcatchments`", "`dict | bool | None`", "`None`", "Subcatchment-layer styling dictionary or visibility flag."],
+        ["`rain_gages`", "`dict | bool | None`", "`None`", "Rain-gage-layer styling dictionary or visibility flag."],
+        ["`labels`", "`dict | bool | None`", "`None`", "Label-layer styling dictionary or visibility flag."],
+        ["`link_color_by`", "`str | None`", "`None`", "Alias for parameter-driven link color."],
+        ["`link_color_mode`", "`str | None`", "`None`", "Alias mode for link color: continuous or discrete."],
+        ["`link_cmap`", "`str | None`", "`None`", "Alias colormap for link styling."],
+        ["`node_color_result`", "`str | None`", "`None`", "Alias for result-driven node color variable."],
+        ["`node_result_aggregation`", "`str | None`", "`None`", "Alias aggregation for node result styling."],
+        ["`link_user_data`", "`mapping | Series | None`", "`None`", "Alias for user-driven link color data."],
+    ]
+    layer_rows = [
+        ["`nodes`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `edge_color`, `marker`, `linewidth`, `ids`", "`size=30`, `color='black'`, `edge_color='white'`, `marker='o'`"],
+        ["`links`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `width`, `color`, `linestyle`, `ids`", "`width=1.5`, `color='gray'`, `linestyle='-'`"],
+        ["`subcatchments`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `color`, `edge_color`, `linewidth`, `ids`", "`color='lightgreen'`, `edge_color='green'`, `alpha=0.25`"],
+        ["`rain_gages`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `marker`, `ids`", "`size=45`, `color='tab:blue'`, `marker='^'`"],
+        ["`labels`", "`visible`, `alpha`, `zorder`, `fontsize`, `color`", "`visible=False`, `fontsize=8`, `color='black'`"],
+    ]
+    style_rows = [
+        ["`by`", "`static`, `parameter`, `result`, or `user`", "Select where styling values come from."],
+        ["`value`", "static color/size/width", "Used when `by='static'`."],
+        ["`category`, `variable`", "public getter names", "Required for `parameter` and `result` styling."],
+        ["`data`", "mapping or pandas Series", "Required for `user` styling."],
+        ["`mode`", "`continuous` or `discrete`", "Color mapping mode; sizes/widths currently scale numeric values continuously."],
+        ["`cmap`", "matplotlib colormap name", "Colormap for continuous or discrete color encoding."],
+        ["`vmin`, `vmax`", "numeric bounds", "Optional continuous color scaling bounds."],
+        ["`aggregation`", "`last`, `max`, `min`, `mean`, `median`, or `sum`", "Collapse result time series to one value per object."],
+        ["`time_step`, `time`", "integer index or timestamp-like value", "Select one result instant instead of aggregating."],
+        ["`legend`, `legend_title`", "`bool`, `str`", "Control colorbar/legend presentation."],
+        ["`min_size`, `max_size`", "numeric bounds", "Node-size scaling bounds."],
+        ["`min_width`, `max_width`", "numeric bounds", "Link-width scaling bounds."],
+        ["`labels`, `bins`", "sequence metadata", "Accepted style metadata for discrete presentation; labels are used for color categories."],
+    ]
+    timeseries_options = [
+        ["`ids`", "`None | str | list[str]`", "`None`", "Select all, one, or several objects where the category is object-based."],
+        ["`legend`", "`bool`", "`True`", "Show line legend."],
+        ["`grid`", "`bool`", "`True`", "Show grid lines."],
+        ["`title`", "`str | None`", "`None`", "Optional title; otherwise generated from category and variable."],
+        ["`legend_title`", "`str | None`", "`None`", "Optional legend title."],
+        ["`axis`", "`bool`", "`True`", "Show axes and ticks."],
+        ["`x_axis_title`", "`str | None`", "`None`", "Optional x-axis title; defaults to Time or elapsed hours."],
+        ["`y_axis_title`", "`str | None`", "`None`", "Optional y-axis title; defaults to variable name plus `unit`."],
+        ["`save_format`", "`str | None`", "`None`", "Optional save format."],
+        ["`save_path`", "`str | Path | None`", "`None`", "Optional file path or existing folder target."],
+        ["`figsize`", "`tuple[float, float]`", "`(10, 4)`", "Figure size when `ax` is not supplied."],
+        ["`dpi`", "`int`", "`300`", "Figure resolution."],
+        ["`ax`", "matplotlib `Axes | None`", "`None`", "Compose into existing axes."],
+        ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
+        ["`unit`", "`str | None`", "`None`", "Optional unit text appended to the y-axis label."],
+        ["`time_format`", "`'timestamp' | 'elapsed'`", "`'timestamp'`", "Use timestamp x-values or elapsed hours."],
+        ["`start_time`, `end_time`", "timestamp-like", "`None`", "Optional time-window filters."],
+        ["`labels`", "`dict | list | tuple | None`", "`None`", "Custom line labels by column name or plot order."],
+        ["`linewidth`", "`float`", "`1.5`", "Line width."],
+        ["`linestyle`", "`str`", "`'-'`", "Matplotlib line style."],
+        ["`marker`", "matplotlib marker or `None`", "`None`", "Optional point marker."],
+        ["`alpha`", "`float`", "`1.0`", "Line transparency."],
+        ["`max_series`", "`int | None`", "`None`", "Optional guardrail against plotting too many columns."],
+    ]
+    profile_endpoint_rows = [
+        ["`m.plot_profile.nodes(start_node, end_node, ...)`", "Existing start/end node IDs", "Find a directed hydraulic path between nodes, then plot it."],
+        ["`m.plot_profile.links(ids, ...)`", "One ordered link ID or list of link IDs", "Validate connected order, then plot exactly that sequence."],
+        ["`m.plot_profile.longest(...)`", "No path selector", "Find the longest directed conduit path and plot it."],
+    ]
+    profile_options = [
+        ["`time_step`", "`int`", "`-1`", "Result row index for overlay variables; `-1` means last row."],
+        ["`aggregation`", "`str | None`", "`None`", "Optional result aggregation: last, max, min, mean, or median."],
+        ["`legend`", "`bool`", "`True`", "Show profile legend."],
+        ["`grid`", "`bool`", "`True`", "Show grid lines."],
+        ["`title`", "`str | None`", "`None`", "Optional profile title."],
+        ["`legend_title`", "`str | None`", "`None`", "Optional legend title."],
+        ["`axis`", "`bool`", "`True`", "Show axes and ticks."],
+        ["`x_axis_title`", "`str | None`", "`None`", "Optional x-axis title; defaults to Distance."],
+        ["`y_axis_title`", "`str | None`", "`None`", "Optional y-axis title; defaults to Elevation."],
+        ["`save_format`", "`str | None`", "`None`", "Optional save format."],
+        ["`save_path`", "`str | Path | None`", "`None`", "Optional file path or existing folder target."],
+        ["`figsize`", "`tuple[float, float]`", "`(12, 5)`", "Figure size when `ax` is not supplied."],
+        ["`dpi`", "`int`", "`300`", "Figure resolution."],
+        ["`ax`", "matplotlib `Axes | None`", "`None`", "Compose into existing axes."],
+        ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
+        ["`unit_length`, `unit_elevation`", "`str | None`", "`None`", "Optional axis-unit labels."],
+        ["`show_ground`", "`bool`", "`True`", "Draw approximated ground line."],
+        ["`show_conduits`", "`bool`", "`True`", "Draw conduit barrels."],
+        ["`show_invert`", "`bool`", "`True`", "Draw node invert line."],
+        ["`show_crown`", "`bool`", "`True`", "Draw conduit crown line."],
+        ["`show_hgl`", "`bool`", "`False`", "Draw hydraulic grade line; requires results."],
+        ["`show_egl`", "`bool`", "`False`", "Request energy grade line; currently warns and skips because EGL is not exposed."],
+        ["`show_water_depth`", "`bool`", "`False`", "Draw water level; requires results."],
+        ["`show_node_labels`", "`bool`", "`True`", "Annotate nodes."],
+        ["`show_link_labels`", "`bool`", "`False`", "Annotate links."],
+        ["`show_surcharge`", "`bool`", "`True`", "Mark surcharge locations when results are available."],
+        ["`show_flooding`", "`bool`", "`True`", "Mark flooding locations when results are available."],
+        ["`fill_conduits`", "`bool`", "`False`", "Fill conduit polygons instead of drawing a thicker barrel line."],
+        ["`line_styles`", "`dict[str, str] | None`", "`None`", "Override styles for `ground`, `invert`, `crown`, `hgl`, or `water`."],
+        ["`colors`", "`dict[str, str] | None`", "`None`", "Override colors for `ground`, `invert`, `crown`, `conduit`, `hgl`, `water`, `flooding`, or `surcharge`."],
+    ]
+    save_rows = [
+        ["No `save_path`, no `save_format`", "Do not save."],
+        ["Only `save_format`", "Save beside the model file, or in the current working directory for unsaved models."],
+        ["Existing folder in `save_path`", "Create a sensible filename inside that folder."],
+        ["Path without extension", "Append the requested format, or `.png` by default."],
+        ["Path with extension", "Infer format from extension unless `save_format` overrides it."],
+        ["Supported formats", "`png`, `jpg`, `jpeg`, `pdf`, `svg`, `tiff`."],
+    ]
+    error_rows = [
+        ["`PlotDataError`", "Missing coordinates, invalid style data, non-time-series variable, invalid profile geometry, or invalid time selection."],
+        ["`ModelNotRunError`", "Result-driven layout styling, time-series plotting, or requested profile result overlays before `m.run()`."],
+        ["`UnknownIDError`", "Requested node/link/object ID is not present."],
+        ["`UnknownCategoryError` / `UnknownParameterError`", "Unknown dynamic time-series category or variable."],
+        ["`NoPathError`", "No directed hydraulic path exists between requested nodes."],
+        ["`InvalidPathError`", "Supplied profile links are empty or not connected in order."],
+        ["`SaveError`", "Unsupported save format or a figure cannot be written."],
+    ]
+
+    cells = [
+        _md(
+            "# swmmx: all plotting functions\n\n"
+            "This notebook is a comprehensive reference for every public matplotlib plotting API in `swmmx`.\n\n"
+            "It covers whole-network layout plots, dynamic result time-series plots, longitudinal hydraulic profile plots, "
+            "and every public input, default, output, variable family, save rule, and common error.\n\n"
+            "All plotting APIs use matplotlib directly and return the same core result: `(fig, ax)`."
+        ),
+        _code(
+            "from pathlib import Path\n"
+            "import matplotlib\n"
+            "matplotlib.use('Agg')  # safe for notebooks, tests, and headless environments\n"
+            "import matplotlib.pyplot as plt\n"
+            "from swmmx import swmm\n\n"
+            "example_path = Path('examples/example.inp')\n"
+            "output_dir = Path('examples/output')\n"
+            "output_dir.mkdir(parents=True, exist_ok=True)\n"
+            "m = swmm(example_path)\n"
+        ),
+        _md(
+            "## Plotting families\n\n"
+            + _table(
+                ["Public API", "Purpose", "Needs results?", "Return value"],
+                [
+                    ["`m.plot_layout(...)`", "Draw mapped nodes, links, subcatchments, rain gages, labels, and optional data-driven styling.", "Only for result-driven styling.", "`(fig, ax)`"],
+                    ["`m.plot_timeseries.<category>.<variable>(ids=None, ...)`", "Plot one or many result series against time.", "Yes.", "`(fig, ax)`"],
+                    ["`m.plot_profile.nodes(...)` / `.links(...)` / `.longest(...)`", "Plot a longitudinal hydraulic path with geometry and optional result overlays.", "Only for HGL/water overlays.", "`(fig, ax)`"],
+                ],
+            )
+        ),
+        _md("## Shared save behavior\n\n" + _table(["Case", "Behavior"], save_rows)),
+        _md(
+            "## `m.plot_layout()`\n\n"
+            "Layout plots read map geometry from `[COORDINATES]`, `[VERTICES]`, `[POLYGONS]`, and `[SYMBOLS]`. "
+            "Elements with unusable coordinates are skipped with warnings; if no plottable geometry exists, the call raises `PlotDataError`.\n\n"
+            + _table(["Input", "Type", "Default", "Meaning"], layout_options)
+        ),
+        _md("### Layout layer dictionaries\n\n" + _table(["Layer", "Supported keys", "Important defaults"], layer_rows)),
+        _md(
+            "### Data-driven layout style dictionaries\n\n"
+            "The `color`, node `size`, and link `width` keys can be static values or richer dictionaries. "
+            "Result-driven encodings require `m.run()` first.\n\n"
+            + _table(["Key", "Accepted values", "Meaning"], style_rows)
+        ),
+        _md(
+            "### Layout examples\n\n"
+            "```python\n"
+            "m.plot_layout()\n\n"
+            "m.plot_layout(\n"
+            "    nodes={'size': 40, 'color': 'black'},\n"
+            "    links={'width': 1.5, 'color': 'gray'},\n"
+            ")\n\n"
+            "m.plot_layout(\n"
+            "    links={\n"
+            "        'color': {\n"
+            "            'by': 'parameter',\n"
+            "            'category': 'conduit',\n"
+            "            'variable': 'roughness',\n"
+            "            'mode': 'continuous',\n"
+            "            'cmap': 'viridis',\n"
+            "        }\n"
+            "    }\n"
+            ")\n\n"
+            "m.plot_layout(link_color_by='roughness', link_color_mode='continuous', link_cmap='viridis')\n"
+            "```\n"
+        ),
+        _code(
+            "fig, ax = m.plot_layout(\n"
+            "    title='Network layout',\n"
+            "    nodes={'size': 40, 'color': 'black'},\n"
+            "    links={'width': 1.5, 'color': 'gray'},\n"
+            "    show=False,\n"
+            "    save_path=output_dir / 'notebook_layout_example.png',\n"
+            ")\n"
+            "plt.close(fig)\n"
+        ),
+        _md(
+            "## `m.plot_timeseries.<category>.<variable>()`\n\n"
+            "Time-series endpoints are generated dynamically from public result variables. "
+            "They require a completed run and use a timestamp index by default.\n\n"
+            + _table(["Input", "Type", "Default", "Meaning"], timeseries_options)
+        ),
+        _md("### Available time-series variables\n\n" + _plot_timeseries_catalog(model)),
+        _md(
+            "### Time-series examples\n\n"
+            "```python\n"
+            "m.run()\n"
+            "m.plot_timeseries.link.flow(['C1', 'C2'])\n"
+            "m.plot_timeseries.node.depth('J1', title='Node depth')\n"
+            "m.plot_timeseries.system.runoff(time_format='elapsed')\n"
+            "```\n"
+        ),
+        _code(
+            "# Result-based plotting examples need an executed model.\n"
+            "m.run()\n"
+            "fig, ax = m.plot_timeseries.link.flow(\n"
+            "    ids=['P001', 'P005'],\n"
+            "    title='Conduit flow',\n"
+            "    y_axis_title='Flow',\n"
+            "    show=False,\n"
+            "    save_path=output_dir / 'notebook_timeseries_example.png',\n"
+            ")\n"
+            "plt.close(fig)\n"
+        ),
+        _md("## `m.plot_profile`\n\n" + _table(["Public API", "Path selector input", "Behavior"], profile_endpoint_rows)),
+        _md(
+            "### Profile inputs\n\n"
+            "Profiles use directed conduit connectivity, node invert elevations, conduit lengths, and conduit full depths. "
+            "Ground elevation is approximated from node invert plus max depth when needed. "
+            "EGL is currently not exposed by the result layer, so requesting `show_egl=True` emits a warning and skips that overlay.\n\n"
+            + _table(["Input", "Type", "Default", "Meaning"], profile_options)
+        ),
+        _md(
+            "### Profile examples\n\n"
+            "```python\n"
+            "m.plot_profile.nodes('J1', 'OUT1', show_hgl=True, aggregation='max')\n"
+            "m.plot_profile.links(['C1', 'C2', 'C3'], show_ground=True, show_conduits=True)\n"
+            "m.plot_profile.longest(show_hgl=True, aggregation='max')\n"
+            "```\n"
+        ),
+        _code(
+            "fig, ax = m.plot_profile.longest(\n"
+            "    show_hgl=True,\n"
+            "    aggregation='max',\n"
+            "    title='Longest path profile',\n"
+            "    show=False,\n"
+            "    save_path=output_dir / 'notebook_profile_example.png',\n"
+            ")\n"
+            "plt.close(fig)\n"
+        ),
+        _md("## Validation and common errors\n\n" + _table(["Error", "Typical cause"], error_rows)),
+    ]
+    return _notebook(cells)
+
+
 def _notebook(cells: list[dict]) -> dict:
     """Return shared notebook metadata around prebuilt cells."""
 
@@ -804,6 +1110,7 @@ def main() -> None:
     SET_NOTEBOOK.write_text(json.dumps(_set_notebook(model), indent=2), encoding="utf-8")
     ADD_NOTEBOOK.write_text(json.dumps(_add_notebook(), indent=2), encoding="utf-8")
     REMOVE_NOTEBOOK.write_text(json.dumps(_remove_notebook(), indent=2), encoding="utf-8")
+    PLOT_NOTEBOOK.write_text(json.dumps(_plot_notebook(model), indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

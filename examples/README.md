@@ -25,6 +25,7 @@ Additional notebooks:
 | `12_all_set_functions.ipynb` | Categorized reference notebook for every public setter path, including writable/read-only behavior |
 | `13_all_add_functions.ipynb` | Categorized reference notebook for every public add endpoint, including inputs, types, defaults, and conditions |
 | `14_all_remove_functions.ipynb` | Categorized reference notebook for every public remove endpoint, including dependencies, force behavior, and outputs |
+| `15_all_plot_functions.ipynb` | Comprehensive plotting reference for layout, time-series, and profile APIs, including every input, output, variable family, style table, and save rule |
 
 Run an example from the repository root:
 
@@ -45,6 +46,7 @@ jupyter notebook examples/11_all_get_functions.ipynb
 jupyter notebook examples/12_all_set_functions.ipynb
 jupyter notebook examples/13_all_add_functions.ipynb
 jupyter notebook examples/14_all_remove_functions.ipynb
+jupyter notebook examples/15_all_plot_functions.ipynb
 ```
 
 Notes:
