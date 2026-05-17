@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from swmmx import ObjectNotFoundError, swmm
+from swmmx import swmm
 from swmmx.parameters import api_name
 
 
@@ -9,7 +9,7 @@ EXAMPLE = ROOT / "examples" / "example.inp"
 
 
 def test_all_declared_get_functions_exist_and_execute():
-    """Every declared getter should resolve and either return data or report an absent collection."""
+    """Every declared getter should resolve and execute on a run model."""
 
     model = swmm(EXAMPLE)
     model.run()
@@ -19,12 +19,7 @@ def test_all_declared_get_functions_exist_and_execute():
         parameter = api_name(spec.sub_category)
         getter = getattr(getattr(model.get, category), parameter)
         assert callable(getter), f"m.get.{category}.{parameter} is not callable."
-        try:
-            getter()
-        except ObjectNotFoundError:
-            # The example model intentionally omits many optional SWMM object
-            # families; absence is the correct runtime state, not a missing API.
-            pass
+        getter()
 
 
 def test_get_namespaces_advertise_complete_node_surface():

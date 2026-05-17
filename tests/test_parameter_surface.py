@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
-from swmmx import ObjectNotFoundError, ReadOnlyParameterError, swmm
+from swmmx import ObjectNotFoundError, ReadOnlyParameterError, UnknownIDError, swmm
 from swmmx.parameters import api_name
 
 
@@ -95,12 +97,29 @@ def test_every_non_writable_parameter_raises_read_only_on_set():
             setter(1.0)
 
 
-def test_get_and_set_raise_clear_errors_when_required_objects_do_not_exist():
-    """Empty models should explain that the requested object collection is absent."""
+def test_get_returns_empty_values_when_requested_collection_is_absent():
+    """Asking for every object in an absent family should return an empty result."""
 
     model = swmm(new="SI")
 
-    with pytest.raises(ObjectNotFoundError, match="No conduit objects are available"):
-        model.get.conduit.length()
+    conduit_lengths = model.get.conduit.length()
+    weir_heights = model.get.weir.crest_height()
+    weir_heights_df = model.get.weir.crest_height(format="df")
+
+    assert isinstance(conduit_lengths, np.ndarray)
+    assert conduit_lengths.size == 0
+    assert isinstance(weir_heights, np.ndarray)
+    assert weir_heights.size == 0
+    assert isinstance(weir_heights_df, pd.DataFrame)
+    assert weir_heights_df.empty
+
+
+def test_empty_collection_still_rejects_explicit_unknown_ids_and_setters():
+    """Explicit IDs and writes should stay strict even when a family is empty."""
+
+    model = swmm(new="SI")
+
+    with pytest.raises(UnknownIDError, match="Unknown weir ID 'W1'"):
+        model.get.weir.crest_height("W1")
     with pytest.raises(ObjectNotFoundError, match="No conduit objects are available"):
         model.set.conduit.roughness(0.013)

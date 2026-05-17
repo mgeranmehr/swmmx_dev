@@ -1009,10 +1009,13 @@ def coerce_value(value: str, declared_type: str) -> Any:
 def normalize_ids(ids, available_ids: list[str], category: str) -> tuple[list[str], bool]:
     """Normalize user ID input and report whether exactly one ID was requested."""
 
-    if not available_ids:
-        raise ObjectNotFoundError(f"No {category} objects are available in this model.")
-
     if ids is None:
+        # Asking for every object in an empty collection is still an
+        # operation that callers such as setters may want to reject.  Getter
+        # entry points that intentionally treat empty collections as valid
+        # return before reaching this helper.
+        if not available_ids:
+            raise ObjectNotFoundError(f"No {category} objects are available in this model.")
         selected = list(available_ids)
         explicit_single = False
     elif isinstance(ids, str):

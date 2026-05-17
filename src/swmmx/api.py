@@ -281,6 +281,19 @@ class SWMMModel:
             value = self._get_option_parameter(spec)
             return self._format_scalar(value, spec, format=format)
 
+        # An omitted ``ids`` argument means "give me every object of this
+        # kind."  If a valid SWMM model simply has no objects of that kind,
+        # the most useful answer is an empty result rather than an exception.
+        # Explicit ID requests still continue through the ordinary validation
+        # path below so typos such as ``ids="W1"`` remain visible to users.
+        if (
+            ids is None
+            and spec.main_category in OBJECT_SECTIONS
+            and spec.sub_category != "count"
+            and not self._ids_for_category(spec.main_category)
+        ):
+            return self._format_empty_collection(spec, format=format)
+
         special = self._get_special_parameter(spec, ids=ids, format=format)
         if special is not _MISSING:
             return special
@@ -720,6 +733,37 @@ class SWMMModel:
                 return np.asarray(values, dtype=object)
         if selected_format == "df":
             return pd.DataFrame([values], columns=selected_ids)
+        raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
+
+    def _format_empty_collection(self, spec: ParameterSpec, *, format=None):
+        """Return a shape-appropriate empty value for an absent object family."""
+
+        # Result variables are time-series by definition.  If a previous run is
+        # available, preserve its time axis and expose zero object columns.  If
+        # no run exists yet, an empty 0x0 result still communicates the central
+        # fact cleanly: there are no objects of the requested family.
+        if spec.source_kind == "result":
+            timestamps = list(self._run_timestamps or [])
+            matrix = np.empty((len(timestamps), 0))
+            selected_format = "np" if format is None else format
+            if selected_format == "np":
+                return matrix
+            if selected_format == "df":
+                return pd.DataFrame(
+                    matrix,
+                    index=pd.DatetimeIndex(timestamps, name="time"),
+                )
+            raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
+
+        # Static/user/derived object parameters follow the ordinary non-time
+        # getter convention, except that a DataFrame with no selected objects
+        # should be genuinely empty rather than a visually confusing one-row
+        # frame with zero columns.
+        selected_format = "np" if format is None else format
+        if selected_format == "np":
+            return np.asarray([])
+        if selected_format == "df":
+            return pd.DataFrame()
         raise FormatError(f"Unsupported format '{format}'. Use one of: 'np', 'df'")
 
     def _format_time_values(self, matrix, selected_ids, explicit_single: bool, *, format=None):

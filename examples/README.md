@@ -16,6 +16,8 @@ For first-time learning, the same ten topics are also available as flatter scrip
 | `08_time_and_count_functions.py` | Use pre-run/run time vectors and model count summaries |
 | `09_get_set_examples.py` | Read values in practical containers, set parameters, update options, and catch read-only errors |
 | `10_create_model_from_scratch_add_remove.py` | Build a small SI model from scratch, validate it, save it, remove a link, and save again |
+| `11_all_get_functions.ipynb` | Categorized reference notebook for every public getter, including input/output notes |
+| `12_all_set_functions.ipynb` | Categorized reference notebook for every public setter path, including writable/read-only behavior |
 
 Run an example from the repository root:
 
@@ -27,6 +29,13 @@ Run a simpler learning version:
 
 ```bash
 python examples/simple/01_open_validate_run.py
+```
+
+Open the notebooks in JupyterLab, Jupyter Notebook, VS Code, or another notebook viewer:
+
+```bash
+jupyter notebook examples/11_all_get_functions.ipynb
+jupyter notebook examples/12_all_set_functions.ipynb
 ```
 
 Notes:

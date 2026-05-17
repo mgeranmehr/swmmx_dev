@@ -19,7 +19,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.16` currently provides:
+Version `0.0.17` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -40,6 +40,32 @@ m = swmm()                               # new SI model, LPS by default
 m = swmm(new="SI", flow_unit="CMS")      # new SI model
 m = swmm(new="US", flow_unit="GPM")      # new US model
 ```
+
+## Examples
+
+The repository includes a small learning suite in [`examples/`](examples/). The main scripts are fuller runnable demonstrations that include validation, safer branching, and file-output handling. The [`examples/simple/`](examples/simple/) folder contains the same ten topics in flatter teaching form: no `main()` function, no `try` blocks, and fewer defensive branches, so the API is easier to read line by line.
+
+| Topic | Standard example | Simple learning version |
+| --- | --- | --- |
+| Open, validate, and run | [`01_open_validate_run.py`](examples/01_open_validate_run.py) | [`simple/01_open_validate_run.py`](examples/simple/01_open_validate_run.py) |
+| Modify conduit diameters and compare | [`02_modify_conduit_diameters_compare.py`](examples/02_modify_conduit_diameters_compare.py) | [`simple/02_modify_conduit_diameters_compare.py`](examples/simple/02_modify_conduit_diameters_compare.py) |
+| Step-by-step runs | [`03_step_by_step_runs_dynamic_control.py`](examples/03_step_by_step_runs_dynamic_control.py) | [`simple/03_step_by_step_runs_dynamic_control.py`](examples/simple/03_step_by_step_runs_dynamic_control.py) |
+| Layout plots | [`04_plot_layout_examples.py`](examples/04_plot_layout_examples.py) | [`simple/04_plot_layout_examples.py`](examples/simple/04_plot_layout_examples.py) |
+| Time-series plots | [`05_plot_timeseries_examples.py`](examples/05_plot_timeseries_examples.py) | [`simple/05_plot_timeseries_examples.py`](examples/simple/05_plot_timeseries_examples.py) |
+| Profile plots | [`06_plot_profile_examples.py`](examples/06_plot_profile_examples.py) | [`simple/06_plot_profile_examples.py`](examples/simple/06_plot_profile_examples.py) |
+| GIS/CSV/Excel export | [`07_export_examples.py`](examples/07_export_examples.py) | [`simple/07_export_examples.py`](examples/simple/07_export_examples.py) |
+| Time and count helpers | [`08_time_and_count_functions.py`](examples/08_time_and_count_functions.py) | [`simple/08_time_and_count_functions.py`](examples/simple/08_time_and_count_functions.py) |
+| Get/set patterns | [`09_get_set_examples.py`](examples/09_get_set_examples.py) | [`simple/09_get_set_examples.py`](examples/simple/09_get_set_examples.py) |
+| Build a model from scratch | [`10_create_model_from_scratch_add_remove.py`](examples/10_create_model_from_scratch_add_remove.py) | [`simple/10_create_model_from_scratch_add_remove.py`](examples/simple/10_create_model_from_scratch_add_remove.py) |
+
+Run them from the repository root:
+
+```bash
+python examples/01_open_validate_run.py
+python examples/simple/01_open_validate_run.py
+```
+
+The examples use `examples/example.inp`, avoid overwriting it, and write generated files into `examples/output/`.
 
 ## Installation note
 
@@ -83,7 +109,16 @@ m.set.conduit.roughness(0.013)
 m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
-Supported getters default to NumPy output; `format="df"` gives pandas output. `dir(m.get.<category>)` now exposes the full declared parameter surface, including input fields, attached records, derived values, and result variables. `dir(m.set.<category>)` exposes the full editable surface. Attempting to set a derived or result parameter raises a read-only error, and requesting an object collection that is absent from the model raises a clear missing-object error.
+Supported getters default to NumPy output; `format="df"` gives pandas output. `dir(m.get.<category>)` now exposes the full declared parameter surface, including input fields, attached records, derived values, and result variables. `dir(m.set.<category>)` exposes the full editable surface. Attempting to set a derived or result parameter raises a read-only error. If a valid model simply has no objects of a requested type, an all-object getter such as `m.get.weir.crest_height()` returns an empty result; explicit missing IDs still raise a clear `UnknownIDError`.
+
+### API reference notebooks
+
+For users who prefer a browsable learning reference, the `examples/` folder includes two complete Jupyter notebooks:
+
+- [`examples/11_all_get_functions.ipynb`](examples/11_all_get_functions.ipynb): a categorized guide to every available `m.get.<main_category>.<sub_category>()` function. It lists all categories and sub-items, shows the callable form, identifies input fields such as `ids` and `format`, and explains expected outputs for scalar values, arrays, DataFrames, structured fields, result variables, and empty object collections.
+- [`examples/12_all_set_functions.ipynb`](examples/12_all_set_functions.ipynb): a categorized guide to every available `m.set.<main_category>.<sub_category>()` path. It explains accepted value types, scalar broadcasting, 1D vector/Series inputs, structured payloads such as coordinates and geometry, reference validation, and which parameters are intentionally read-only.
+
+These notebooks are useful both as tutorials and as a practical API checklist when editing models interactively in Jupyter, VS Code, or Spyder.
 
 ## Counts
 
