@@ -78,7 +78,7 @@ def main() -> None:
         show=False,
         save_path=output_dir / "profile_longest_path.png",
     )
-    # EGL is intentionally omitted here: 0.0.10 documents it as not yet available.
+    # EGL is intentionally omitted here because it is not yet available.
     print(f"Saved profile plots to: {output_dir}")
 
 

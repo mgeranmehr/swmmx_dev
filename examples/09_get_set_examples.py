@@ -36,7 +36,7 @@ def main() -> None:
     if len(selected_conduits) == 2:
         model.set.conduit.roughness(np.array([0.015, 0.016]), ids=selected_conduits)
 
-    # 0.0.10 setters accept ordered vectors, not dictionaries directly.  Convert
+    # Setters accept ordered vectors, not dictionaries directly.  Convert
     # a dictionary to an ID-aligned list when that is the most natural input.
     roughness_by_id = {conduit_ids[0]: 0.017}
     ordered_values = [roughness_by_id[conduit_id] for conduit_id in roughness_by_id]

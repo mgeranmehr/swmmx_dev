@@ -18,7 +18,7 @@ def main() -> None:
         print("This example model has no pumps or orifices to control at runtime.")
 
     print(
-        "In swmmx 0.0.10, m.runs() yields SimulationStep timing records "
+        "m.runs() currently yields SimulationStep timing records "
         "(index, time, elapsed_days). Live step.get/step.set state control is "
         "reserved for a future release, so this example stays honest and only inspects timing."
     )

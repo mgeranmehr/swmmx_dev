@@ -7,13 +7,14 @@ from swmmx import (
     DimensionMismatchError,
     InvalidReferenceError,
     ModelNotRunError,
+    OptionalDependencyError,
     ReadOnlyParameterError,
     swmm,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "example" / "example.inp"
+EXAMPLE = ROOT / "examples" / "example.inp"
 
 
 def test_open_and_pre_run_time_vector():
@@ -46,6 +47,22 @@ def test_new_models_have_expected_default_units():
     assert swmm(new="SI", flow_unit="CMS").options["FLOW_UNITS"] == "CMS"
     assert swmm(new="US").options["FLOW_UNITS"] == "CFS"
     assert swmm(new="US", flow_unit="MGD").options["FLOW_UNITS"] == "MGD"
+
+
+def test_model_creation_reports_missing_runtime_dependencies(monkeypatch):
+    from swmmx import dependencies
+
+    monkeypatch.setattr(
+        dependencies,
+        "find_spec",
+        lambda name: None if name in {"numpy", "pandas", "matplotlib", "networkx"} else object(),
+    )
+
+    with pytest.raises(
+        OptionalDependencyError,
+        match=r"swmmx runtime dependencies are missing: numpy, pandas, matplotlib, networkx",
+    ):
+        swmm(new="SI")
 
 
 def test_constructor_rejects_invalid_argument_combinations():

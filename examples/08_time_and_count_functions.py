@@ -15,7 +15,7 @@ def main() -> None:
     model = swmm(get_example_path())
     save_working_copy(model, "08_time_count_working_copy.inp")
 
-    # In 0.0.10, time helpers live under m.time and return pandas DataFrames.
+    # Time helpers live under m.time and return pandas DataFrames.
     expected_time_df = model.time.vector()
     expected_time_np = expected_time_df.index.to_numpy()
     print(f"Expected pre-run report periods: {model.time.count()}")

@@ -11,7 +11,7 @@ from swmmx import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "example" / "example.inp"
+EXAMPLE = ROOT / "examples" / "example.inp"
 
 
 def _model_with_minimal_network():
@@ -177,4 +177,3 @@ def test_results_are_marked_stale_after_add_and_remove():
     model.remove.node.junction("JNEW")
     assert model.results_stale
     assert not model.has_run
-

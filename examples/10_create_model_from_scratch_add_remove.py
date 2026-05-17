@@ -55,7 +55,7 @@ def main() -> None:
             polygon=[(-10.0, -10.0), (10.0, -10.0), (10.0, 10.0), (-10.0, 10.0)],
         )
     except NotImplementedYetError as exc:
-        print(f"One requested builder is not ready in 0.0.10: {exc}")
+        print(f"One requested builder is not ready yet: {exc}")
         return
 
     issues = model.validate()

@@ -14,7 +14,7 @@ from swmmx import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "example" / "example.inp"
+EXAMPLE = ROOT / "examples" / "example.inp"
 HAS_GIS = bool(importlib.util.find_spec("geopandas") and importlib.util.find_spec("shapely"))
 
 
@@ -117,4 +117,3 @@ def test_export_gis_writes_spatial_layers(tmp_path):
     assert set(gpd.read_file(node_outputs["nodes"]).geometry.geom_type) == {"Point"}
     assert set(gpd.read_file(link_outputs["links"]).geometry.geom_type) == {"LineString"}
     assert set(gpd.read_file(sub_outputs["subcatchments"]).geometry.geom_type) == {"Polygon"}
-

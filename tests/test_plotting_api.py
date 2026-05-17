@@ -18,7 +18,7 @@ from swmmx import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXAMPLE = ROOT / "example" / "example.inp"
+EXAMPLE = ROOT / "examples" / "example.inp"
 
 
 def _close(fig):
@@ -127,4 +127,3 @@ def test_plot_profile_no_path_raises():
 
     with pytest.raises(NoPathError, match="No path was found from node 'Outlet' to node 'P011'"):
         model.plot_profile.nodes("Outlet", "P011", show=False)
-

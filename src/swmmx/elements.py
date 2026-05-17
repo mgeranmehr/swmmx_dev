@@ -603,7 +603,7 @@ class EditableElementService:
         spec = self.registry.spec(category, element_type)
         if not spec.implemented:
             raise NotImplementedYetError(
-                f"m.add.{spec.path}() is reserved but not fully implemented in swmmx 0.0.10."
+                f"m.add.{spec.path}() is reserved but not fully implemented yet."
             )
         self._validate_new_id(spec, id)
         handler = self._add_handlers[(category, element_type)]
@@ -618,7 +618,7 @@ class EditableElementService:
         spec = self.registry.spec(category, element_type)
         if not spec.implemented:
             raise NotImplementedYetError(
-                f"m.remove.{spec.path}() is reserved but not fully implemented in swmmx 0.0.10."
+                f"m.remove.{spec.path}() is reserved but not fully implemented yet."
             )
         selected_ids = self._normalize_remove_ids(spec, ids)
         handler = self._remove_handlers[(category, element_type)]

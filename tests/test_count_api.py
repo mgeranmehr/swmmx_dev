@@ -15,7 +15,7 @@ from swmmx.core.errors import EngineRunError, ParseError, ReferenceError, Valida
 
 
 def test_count_namespace_counts_collections_and_model_summaries():
-    model = swmm("example/example.inp")
+    model = swmm("examples/example.inp")
 
     assert "conduit" in dir(model.count)
     assert "storage_unit" in dir(model.count)
@@ -53,7 +53,7 @@ def test_count_helpers_track_mutations_and_are_documented():
 
 
 def test_dynamic_access_errors_are_specific_and_helpful():
-    model = swmm("example/example.inp")
+    model = swmm("examples/example.inp")
 
     with pytest.raises(UnknownParameterError, match="Did you mean 'roughness'"):
         model.get.conduit.roughnes()
@@ -75,7 +75,7 @@ def test_core_error_module_exports_requested_types():
 
 
 def test_dynamic_getter_docstring_mentions_ids_format_and_read_only_notes():
-    model = swmm("example/example.inp")
+    model = swmm("examples/example.inp")
     length_doc = model.get.conduit.length.__doc__ or ""
     flow_doc = model.get.conduit.flow.__doc__ or ""
 
@@ -88,7 +88,7 @@ def test_dynamic_getter_docstring_mentions_ids_format_and_read_only_notes():
 def test_dynamic_namespaces_ignore_private_introspection_hooks():
     """Spyder/IPython private probes should not become public API errors."""
 
-    model = swmm("example/example.inp")
+    model = swmm("examples/example.inp")
 
     assert not hasattr(model.count, "__custom_documentations__")
     assert not hasattr(model.get, "__custom_documentations__")

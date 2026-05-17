@@ -35,4 +35,4 @@ Notes:
 - GIS export requires optional `geopandas` and `shapely`.
 - Excel export requires optional `openpyxl`.
 - Run-based examples require a working EPA SWMM engine for the current platform.
-- `03_step_by_step_runs_dynamic_control.py` is intentionally honest about the `0.0.10` boundary: step timing is available, while live `step.get` / `step.set` control is future work.
+- `03_step_by_step_runs_dynamic_control.py` is intentionally honest about the current boundary: step timing is available, while live `step.get` / `step.set` control is future work.
