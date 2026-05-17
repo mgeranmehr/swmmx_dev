@@ -1,4 +1,4 @@
-"""Small shared helpers used by the runnable example scripts."""
+﻿"""Small shared helpers used by the runnable example scripts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-EXAMPLES_DIR = Path(__file__).resolve().parent
+EXAMPLES_DIR = Path(__file__).resolve().parents[1]
 
 
 def get_example_path() -> Path:
@@ -51,4 +51,5 @@ def save_working_copy(model, file_name: str) -> Path:
 
     target = get_output_dir() / file_name
     return model.save(target)
+
 

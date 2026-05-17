@@ -118,10 +118,8 @@ EDITABLE_ELEMENT_SPECS = (
         "subcatchment",
         sections=("SUBCATCHMENTS", "SUBAREAS", "INFILTRATION", "POLYGONS"),
         scope="subcatchment",
-        required=("rain_gage", "outlet"),
+        required=("rain_gage", "outlet", "x", "y"),
         optional=(
-            "x",
-            "y",
             "area",
             "width",
             "slope",
@@ -161,11 +159,11 @@ EDITABLE_ELEMENT_SPECS = (
             "subarea_routing": "OUTLET",
         },
         references={"rain_gage": "rain_gage", "outlet": "node_or_subcatchment", "snow_pack": "snow_pack"},
-        coordinate_policy="mapped_min",
+        coordinate_policy="explicit_centroid_required",
         dependencies=("subcatchment.outlet",),
         implemented=True,
         purpose="Add a subcatchment with subarea and infiltration records.",
-        example='m.add.hydrology.subcatchment("S1", rain_gage="RG1", outlet="J1", area=1.0)',
+        example='m.add.hydrology.subcatchment("S1", rain_gage="RG1", outlet="J1", x=0.0, y=0.0, area=1.0)',
     ),
     _spec("hydrology", "aquifer", sections=("AQUIFERS",), scope="aquifer", optional=("porosity", "wilting_point", "field_capacity", "conductivity", "conductivity_slope", "tension_slope", "upper_evaporation_fraction", "lower_evaporation_depth", "lower_groundwater_loss_rate", "bottom_elevation", "water_table_elevation", "unsaturated_moisture", "upper_evaporation_pattern"), purpose="Reserve an aquifer definition."),
     _spec("hydrology", "snow_pack", sections=("SNOWPACKS",), scope="snow_pack", optional=("plowable_fraction", "impervious_fraction", "pervious_fraction", "minimum_melt_coefficient", "maximum_melt_coefficient", "base_temperature", "free_water_capacity_fraction", "initial_snow_depth", "initial_free_water", "depth_at_100_percent_cover"), purpose="Reserve a snow-pack definition."),
@@ -196,30 +194,32 @@ EDITABLE_ELEMENT_SPECS = (
         "junction",
         sections=("JUNCTIONS", "COORDINATES"),
         scope="node",
-        optional=("x", "y", "invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area", "spacing"),
+        required=("x", "y"),
+        optional=("invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area"),
         defaults={"invert_elevation": 0.0, "max_depth": 0.0, "initial_depth": 0.0, "surcharge_depth": 0.0, "ponded_area": 0.0},
-        coordinate_policy="node_next",
+        coordinate_policy="explicit_required",
         dependencies=("link.from_node", "link.to_node", "subcatchment.outlet"),
         implemented=True,
         purpose="Add a hydraulic junction and a coordinate record.",
-        example='m.add.node.junction("J1", invert_elevation=10.0, max_depth=3.0)',
+        example='m.add.node.junction("J1", x=0.0, y=0.0, invert_elevation=10.0, max_depth=3.0)',
     ),
     _spec(
         "node",
         "outfall",
         sections=("OUTFALLS", "COORDINATES"),
         scope="node",
-        optional=("x", "y", "invert_elevation", "type", "fixed_stage", "tidal_curve", "time_series", "tide_gate", "route_to", "spacing"),
+        required=("x", "y"),
+        optional=("invert_elevation", "type", "fixed_stage", "tidal_curve", "time_series", "tide_gate", "route_to"),
         defaults={"invert_elevation": 0.0, "type": "FREE", "tide_gate": "NO"},
         references={"tidal_curve": "curve", "time_series": "time_series"},
-        coordinate_policy="node_next",
+        coordinate_policy="explicit_required",
         dependencies=("link.from_node", "link.to_node", "subcatchment.outlet"),
         implemented=True,
         purpose="Add an outfall and a coordinate record.",
-        example='m.add.node.outfall("OUT1", invert_elevation=9.0, type="FREE")',
+        example='m.add.node.outfall("OUT1", x=100.0, y=0.0, invert_elevation=9.0, type="FREE")',
     ),
-    _spec("node", "divider", sections=("DIVIDERS", "COORDINATES"), scope="node", optional=("x", "y", "invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area", "type", "diverted_link", "cutoff_flow", "diversion_curve", "weir_height", "weir_coefficient"), purpose="Reserve a flow-divider node definition."),
-    _spec("node", "storage_unit", sections=("STORAGE", "COORDINATES"), scope="node", optional=("x", "y", "invert_elevation", "max_depth", "initial_depth", "storage_curve_type", "storage_curve", "area", "area_coefficient", "area_exponent", "area_constant", "evaporation_factor", "seepage_loss"), purpose="Reserve a storage-unit node definition."),
+    _spec("node", "divider", sections=("DIVIDERS", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area", "type", "diverted_link", "cutoff_flow", "diversion_curve", "weir_height", "weir_coefficient"), coordinate_policy="explicit_required", purpose="Reserve a flow-divider node definition."),
+    _spec("node", "storage_unit", sections=("STORAGE", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "storage_curve_type", "storage_curve", "area", "area_coefficient", "area_exponent", "area_constant", "evaporation_factor", "seepage_loss"), coordinate_policy="explicit_required", purpose="Reserve a storage-unit node definition."),
     # Links
     _spec(
         "link",
@@ -477,6 +477,14 @@ def _add_docstring(spec: EditableElementSpec) -> str:
     defaults = ", ".join(f"{key}={value!r}" for key, value in spec.defaults.items()) or "No automatic defaults."
     references = ", ".join(f"{key} -> {target}" for key, target in spec.references.items()) or "No external references."
     example = spec.example or f'm.add.{spec.path}("ID", ...)'
+    coordinate_labels = {
+        "mapped_max": "optional x/y; defaults to the maximum mapped point",
+        "mapped_min": "optional x/y; defaults to the minimum mapped point",
+        "node_next": "optional x/y; defaults beside the current node map",
+        "explicit_required": "explicit x/y required",
+        "explicit_centroid_required": "explicit centroid x/y required",
+    }
+    coordinate_note = coordinate_labels.get(spec.coordinate_policy, spec.coordinate_policy)
     return (
         f"{spec.purpose or f'Add a {spec.element_type} element.'}\n\n"
         "Required parameters\n"
@@ -488,7 +496,7 @@ def _add_docstring(spec: EditableElementSpec) -> str:
         "Defaults\n"
         "--------\n"
         f"{defaults}\n"
-        + (f"Coordinate policy: {spec.coordinate_policy}.\n" if spec.coordinate_policy else "")
+        + (f"Coordinate policy: {coordinate_note}.\n" if coordinate_note else "")
         + "\nValidation notes\n"
         "----------------\n"
         f"IDs must be unique. Reference checks: {references}\n\n"
@@ -782,6 +790,15 @@ class EditableElementService:
             return min(point[0] for point in points), min(point[1] for point in points)
         return 0.0, 0.0
 
+    def _required_coordinate(self, spec: EditableElementSpec, options: dict[str, Any]) -> tuple[float, float]:
+        """Return one mandatory explicit ``(x, y)`` coordinate pair."""
+
+        x_value = self._require(spec, options, "x")
+        y_value = self._require(spec, options, "y")
+        options.pop("x", None)
+        options.pop("y", None)
+        return self._coordinate_value(spec, "x", x_value), self._coordinate_value(spec, "y", y_value)
+
     def _ensure_no_unknown_options(self, spec: EditableElementSpec, options: dict[str, Any]) -> None:
         """Reject misspelled add options after a handler consumes expected keys."""
 
@@ -802,10 +819,10 @@ class EditableElementService:
     # ---------- add handlers ----------
 
     def _add_junction(self, spec: EditableElementSpec, id: str, options: dict[str, Any]) -> str:
-        """Add a junction and its defaulted coordinate row."""
+        """Add a junction and its explicit coordinate row."""
 
         values = {**spec.defaults, **options}
-        x, y = self._default_coordinate(spec, values)
+        x, y = self._required_coordinate(spec, values)
         row = [
             id,
             self._number(spec, "invert_elevation", values.pop("invert_elevation")),
@@ -820,10 +837,10 @@ class EditableElementService:
         return id
 
     def _add_outfall(self, spec: EditableElementSpec, id: str, options: dict[str, Any]) -> str:
-        """Add an outfall and its defaulted coordinate row."""
+        """Add an outfall and its explicit coordinate row."""
 
         values = {**spec.defaults, **options}
-        x, y = self._default_coordinate(spec, values)
+        x, y = self._required_coordinate(spec, values)
         outfall_type = str(values.pop("type")).upper()
         if outfall_type not in self.VALID_OUTFALL_TYPES:
             raise InvalidParameterError(
@@ -975,7 +992,7 @@ class EditableElementService:
         """Add subcatchment, subarea, infiltration, and display geometry rows."""
 
         values = {**spec.defaults, **options}
-        x, y = self._default_coordinate(spec, values)
+        x, y = self._required_coordinate(spec, values)
         rain_gage = self._require(spec, values, "rain_gage")
         outlet = self._require(spec, values, "outlet")
         self._assert_reference(spec, id, "rain_gage", rain_gage, "rain_gage")

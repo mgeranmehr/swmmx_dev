@@ -39,8 +39,8 @@ def test_count_namespace_counts_collections_and_model_summaries():
 
 def test_count_helpers_track_mutations_and_are_documented():
     model = swmm(new="SI")
-    model.add.node.junction("J1")
-    model.add.node.outfall("OUT1")
+    model.add.node.junction("J1", x=0.0, y=0.0)
+    model.add.node.outfall("OUT1", x=100.0, y=0.0)
     model.add.link.conduit("C1", from_node="J1", to_node="OUT1")
 
     assert model.count.junction() == 1

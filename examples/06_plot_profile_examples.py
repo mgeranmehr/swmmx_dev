@@ -1,86 +1,54 @@
-"""06 - Plot longitudinal hydraulic profiles."""
+﻿"""06 simple - Plot longitudinal hydraulic profiles."""
 
-from swmmx import NoPathError, swmm
+from pathlib import Path
 
-from _helpers import get_example_path, get_output_dir, print_header, save_working_copy
+#import matplotlib
+#matplotlib.use("Agg")
 
+import matplotlib.pyplot as plt
 
-def build_connected_conduit_chain(model) -> list[str]:
-    """Return a simple directed conduit chain from the available network."""
-
-    conduit_ids = model.get.conduit.id(format="df").columns.tolist()
-    from_nodes = model.get.conduit.from_node(format="df").iloc[0].to_dict()
-    to_nodes = model.get.conduit.to_node(format="df").iloc[0].to_dict()
-    downstream_nodes = set(to_nodes.values())
-    start_links = [link_id for link_id in conduit_ids if from_nodes[link_id] not in downstream_nodes]
-    current_link = start_links[0] if start_links else conduit_ids[0]
-    chain = [current_link]
-    while True:
-        next_links = [link_id for link_id in conduit_ids if from_nodes[link_id] == to_nodes[current_link]]
-        if not next_links:
-            break
-        current_link = next_links[0]
-        chain.append(current_link)
-    return chain
+from swmmx import swmm
 
 
-def main() -> None:
-    """Create node-path, link-path, and longest-path profile plots."""
+examples_dir = Path(__file__).resolve().parent
+output_dir = examples_dir / "output"
+output_dir.mkdir(parents=True, exist_ok=True)
 
-    print_header("06 - Plot profile examples")
-    output_dir = get_output_dir()
-    model = swmm(get_example_path())
-    save_working_copy(model, "06_profile_working_copy.inp")
-    model.run()
+m = swmm(examples_dir / "example.inp")
+m.save(output_dir / "simple_06_working_copy.inp")
+m.run()
 
-    link_chain = build_connected_conduit_chain(model)
-    from_nodes = model.get.conduit.from_node(format="df").iloc[0]
-    to_nodes = model.get.conduit.to_node(format="df").iloc[0]
-    start_node = from_nodes[link_chain[0]]
-    end_node = to_nodes[link_chain[-1]]
+fig, _ = m.plot_profile.nodes(
+    "P011",
+    "Outlet",
+    show_ground=True,
+    show_conduits=True,
+    show_hgl=True,
+    aggregation="max",
+    title="Profile from P011 to Outlet",
+    show=True,
+    save_path=output_dir / "simple_profile_nodes.png",
+)
+plt.close(fig)
 
-    try:
-        model.plot_profile.nodes(
-            start_node,
-            end_node,
-            title=f"Profile from {start_node} to {end_node}",
-            show_ground=True,
-            show_conduits=True,
-            show_hgl=True,
-            show_water_depth=True,
-            aggregation="max",
-            grid=True,
-            show=False,
-            save_path=output_dir / "profile_between_nodes.png",
-        )
-    except NoPathError as exc:
-        print(f"Could not plot node-to-node profile: {exc}")
+fig, _ = m.plot_profile.links(
+    ["P011", "P005", "P001"],
+    show_ground=True,
+    show_conduits=True,
+    show_hgl=True,
+    time_step=-1,
+    title="Selected Link Profile",
+    show=True,
+    save_path=output_dir / "simple_profile_links.png",
+)
+plt.close(fig)
 
-    model.plot_profile.links(
-        link_chain,
-        title="Profile along selected links",
-        show_ground=True,
-        show_conduits=True,
-        show_hgl=True,
-        time_step=-1,
-        grid=True,
-        show=False,
-        save_path=output_dir / "profile_selected_links.png",
-    )
-    model.plot_profile.longest(
-        title="Longest Path Profile",
-        show_ground=True,
-        show_conduits=True,
-        show_hgl=True,
-        show_water_depth=True,
-        aggregation="max",
-        grid=True,
-        show=False,
-        save_path=output_dir / "profile_longest_path.png",
-    )
-    # EGL is intentionally omitted here because it is not yet available.
-    print(f"Saved profile plots to: {output_dir}")
+fig, _ = m.plot_profile.longest(
+    show_hgl=True,
+    aggregation="max",
+    title="Longest Path Profile",
+    show=True,
+    save_path=output_dir / "simple_profile_longest.png",
+)
+plt.close(fig)
 
-
-if __name__ == "__main__":
-    main()

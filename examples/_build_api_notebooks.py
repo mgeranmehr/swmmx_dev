@@ -1,12 +1,14 @@
-"""Generate the public get/set API reference notebooks for the examples suite."""
+"""Generate the public API reference notebooks for the examples suite."""
 
 from __future__ import annotations
 
 import json
+import inspect
 from pathlib import Path
 from typing import Iterable
 
 from swmmx import swmm
+from swmmx.elements import EDITABLE_ELEMENT_SPECS
 from swmmx.parameters import OBJECT_SECTIONS, api_name
 
 
@@ -14,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "example.inp"
 GET_NOTEBOOK = ROOT / "examples" / "11_all_get_functions.ipynb"
 SET_NOTEBOOK = ROOT / "examples" / "12_all_set_functions.ipynb"
+ADD_NOTEBOOK = ROOT / "examples" / "13_all_add_functions.ipynb"
+REMOVE_NOTEBOOK = ROOT / "examples" / "14_all_remove_functions.ipynb"
 
 
 CATEGORY_GROUPS = [
@@ -120,6 +124,16 @@ CATEGORY_GROUPS = [
     ),
 ]
 
+EDITABLE_CATEGORY_GROUPS = [
+    ("Hydrology", ["hydrology"]),
+    ("Nodes", ["node"]),
+    ("Links", ["link"]),
+    ("Hydraulics", ["hydraulic"]),
+    ("Water quality", ["quality"]),
+    ("Curves", ["curve"]),
+    ("Time data", ["time"]),
+]
+
 
 def _md(text: str) -> dict:
     """Return one markdown notebook cell."""
@@ -161,6 +175,23 @@ def _grouped_categories(all_categories: Iterable[str]) -> list[tuple[str, list[s
     remaining = [name for name in all_categories if name not in seen]
     if remaining:
         grouped.append(("Other public categories", remaining))
+    return grouped
+
+
+def _grouped_editable_categories(all_categories: Iterable[str]) -> list[tuple[str, list[str]]]:
+    """Return add/remove categories in a human-friendly group order."""
+
+    all_categories = list(all_categories)
+    seen: set[str] = set()
+    grouped: list[tuple[str, list[str]]] = []
+    for title, category_names in EDITABLE_CATEGORY_GROUPS:
+        present = [name for name in category_names if name in all_categories]
+        if present:
+            grouped.append((title, present))
+            seen.update(present)
+    remaining = [name for name in all_categories if name not in seen]
+    if remaining:
+        grouped.append(("Other editable categories", remaining))
     return grouped
 
 
@@ -302,6 +333,235 @@ def _category_markdown(model, raw_category: str, mode: str) -> str:
     return "\n".join(lines)
 
 
+def _editable_specs_for_category(category: str):
+    """Return editable element specs in registry order for one category."""
+
+    return [spec for spec in EDITABLE_ELEMENT_SPECS if spec.category == category]
+
+
+def _coordinate_policy_note(policy: str | None) -> str:
+    """Render one concise user-facing coordinate note."""
+
+    labels = {
+        None: "None",
+        "mapped_max": "Optional x/y; defaults to maximum mapped point",
+        "mapped_min": "Optional x/y; defaults to minimum mapped point",
+        "node_next": "Optional x/y; defaults beside the current node map",
+        "explicit_required": "Explicit x/y required",
+        "explicit_centroid_required": "Explicit centroid x/y required",
+    }
+    return labels.get(policy, policy or "None")
+
+
+def _editable_status(spec) -> str:
+    """Return a public implementation-status label."""
+
+    return "Implemented" if spec.implemented else "Reserved; raises `NotImplementedYetError`"
+
+
+def _editable_parameter_names(spec) -> list[str]:
+    """Return every unique public input name for one add endpoint."""
+
+    names = ["id", *spec.required_parameters, *spec.optional_parameters]
+    for parameter in spec.positional_parameters:
+        if parameter.name not in names:
+            names.append(parameter.name)
+    return names
+
+
+def _editable_input_role(spec, name: str) -> str:
+    """Describe whether one add input is required, optional, or positional."""
+
+    positional = {parameter.name for parameter in spec.positional_parameters}
+    if name == "id":
+        return "Required first positional"
+    if name in spec.required_parameters and name in positional:
+        return "Required positional"
+    if name in spec.required_parameters:
+        return "Required keyword"
+    if name in positional:
+        return "Optional positional"
+    return "Optional keyword"
+
+
+def _editable_default(spec, name: str) -> str:
+    """Return a readable add-input default."""
+
+    if name in spec.defaults:
+        return repr(spec.defaults[name])
+    for parameter in spec.positional_parameters:
+        if parameter.name == name and parameter.default is not inspect._empty:
+            return repr(parameter.default)
+    return "None"
+
+
+def _editable_type_hint(spec, name: str) -> str:
+    """Return a practical public type hint for one add option."""
+
+    reference_target = spec.references.get(name)
+    if name == "id":
+        return "`str`"
+    if reference_target:
+        return f"`str` ID of existing `{reference_target}` object"
+    if name in {"x", "y", "length", "width", "height", "diameter", "offset", "crest_height"}:
+        return "`float`"
+    if name in {"barrels", "number", "end_contractions"}:
+        return "`int`"
+    if name in {"points", "polygon", "vertices"}:
+        return "`list[tuple[float, float]]`, pandas DataFrame, or NumPy `(n, 2)` array"
+    if name == "data":
+        return "time/value pairs, pandas Series/DataFrame, or compatible array-like data"
+    if name == "multipliers":
+        return "1D numeric sequence"
+    if name == "geometry":
+        return "numeric sequence of 1 to 4 values"
+    if name == "parameters":
+        return "`dict` or structured layer data"
+    if name in {"text", "description", "filename", "station", "units", "drain_to", "outlet"}:
+        return "`str`"
+    if any(token in name for token in ("fraction", "percent", "coefficient", "roughness", "slope", "depth", "area", "flow", "rate", "elevation", "porosity", "conductivity", "moisture", "exponent", "storage", "availability", "swept", "clogging", "saturation", "temperature", "capacity", "delay")):
+        return "`float`"
+    if name in {"type", "shape", "format", "source_type", "rating_type", "curve_type", "grate_type", "storage_curve_type", "initial_status", "subarea_routing"}:
+        return "`str` enum"
+    if name in {"flap_gate", "tide_gate", "surcharge", "snow_only"}:
+        return "`bool` or SWMM `YES`/`NO` string"
+    return "value compatible with the named SWMM field"
+
+
+def _editable_condition(spec, name: str) -> str:
+    """Return the main validation/usage note for one add option."""
+
+    if name in {"x", "y"} and spec.category == "node":
+        return "Required map coordinate for node placement"
+    if name in {"x", "y"} and spec.path == "hydrology.subcatchment":
+        return "Required subcatchment centroid coordinate"
+    if name in spec.references:
+        return f"Must reference an existing `{spec.references[name]}` object"
+    path_notes = {
+        ("node.outfall", "fixed_stage"): "Required only when `type='FIXED'`",
+        ("node.outfall", "tidal_curve"): "Required only when `type='TIDAL'`",
+        ("node.outfall", "time_series"): "Required only when `type='TIMESERIES'`",
+        ("link.conduit", "length"): "If omitted, computed from node coordinates when available; otherwise 1.0",
+        ("link.conduit", "diameter"): "Used as circular `geometry_1` when no explicit geometry is supplied",
+        ("hydrology.rain_gage", "time_series"): "Required when `source_type='TIMESERIES'`",
+        ("hydrology.rain_gage", "filename"): "Used when `source_type='FILE'`",
+        ("hydrology.subcatchment", "polygon"): "Optional outline; fallback polygon is centered on x/y",
+        ("curve.generic", "type"): "Explicit SWMM curve type",
+    }
+    return path_notes.get((spec.path, name), "Validated according to the element definition")
+
+
+def _element_conditions(spec) -> str:
+    """Return element-level special behavior notes."""
+
+    notes = {
+        "hydrology.rain_gage": "Requires `format`, `interval`, and `source_type`; `time_series` is checked when used.",
+        "hydrology.subcatchment": "Requires explicit centroid `x`/`y`; outlet may be a node or another subcatchment.",
+        "node.junction": "Requires explicit map `x`/`y` coordinates.",
+        "node.outfall": "Requires explicit map `x`/`y`; stage input depends on outfall `type`.",
+        "link.conduit": "Requires existing endpoint nodes; length can be computed from their coordinates.",
+        "curve.generic": "Requires explicit curve `type` plus x/y `points`.",
+        "time.time_series": "Accepts inline time/value data or filename-based series metadata.",
+        "time.time_pattern": "Pattern `type` must be MONTHLY, DAILY, HOURLY, or WEEKEND.",
+    }
+    return notes.get(spec.path, "Use the listed required inputs; unsupported reserved endpoints raise a clear error.")
+
+
+def _editable_add_overview(category: str) -> str:
+    """Build one category overview table for add endpoints."""
+
+    specs = _editable_specs_for_category(category)
+    lines = [
+        f"### `{category}`",
+        "",
+        "| Add function | Status | Required inputs | Optional inputs | Coordinate rule | Output | Conditions |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for spec in specs:
+        required = ", ".join(("id", *spec.required_parameters))
+        optional = ", ".join(spec.optional_parameters) or "None"
+        lines.append(
+            f"| `m.add.{spec.path}(...)` | {_editable_status(spec)} | "
+            f"{_escape(required)} | {_escape(optional)} | "
+            f"{_coordinate_policy_note(spec.coordinate_policy)} | created object ID (`str`) | "
+            f"{_escape(_element_conditions(spec))} |"
+        )
+    return "\n".join(lines)
+
+
+def _editable_add_detail(spec) -> str:
+    """Build one detailed parameter table for one add endpoint."""
+
+    lines = [
+        f"#### `m.add.{spec.path}()`",
+        "",
+        spec.purpose or f"Add one `{spec.element_type}` object.",
+        "",
+        "| Input | Role | Expected type | Default | Conditions / validation |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for name in _editable_parameter_names(spec):
+        lines.append(
+            f"| `{name}` | {_editable_input_role(spec, name)} | "
+            f"{_editable_type_hint(spec, name)} | {_escape(_editable_default(spec, name))} | "
+            f"{_escape(_editable_condition(spec, name))} |"
+        )
+    references = ", ".join(f"{name} -> {target}" for name, target in spec.references.items()) or "None"
+    dependencies = ", ".join(spec.dependency_rules) or "None"
+    lines.extend(
+        [
+            "",
+            f"- **INP sections:** `{', '.join(spec.inp_sections)}`",
+            f"- **Reference checks:** {references}",
+            f"- **Removal dependency rules:** {dependencies}",
+            f"- **Implementation status:** {_editable_status(spec)}",
+            f"- **Example:** `{spec.example or f'm.add.{spec.path}(\"ID\", ...)'}`",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _editable_remove_overview(category: str) -> str:
+    """Build one category overview table for remove endpoints."""
+
+    specs = _editable_specs_for_category(category)
+    lines = [
+        f"### `{category}`",
+        "",
+        "| Remove function | Status | `ids` input | `force` input | Dependency rules | Output | Conditions |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for spec in specs:
+        dependencies = ", ".join(spec.dependency_rules) or "No explicit dependency rules"
+        lines.append(
+            f"| `m.remove.{spec.path}(ids, force=False)` | {_editable_status(spec)} | "
+            "one `str` ID or `list[str]` | `bool`, default `False` | "
+            f"{_escape(dependencies)} | removal summary `dict` | "
+            f"{_escape(_element_conditions(spec))} |"
+        )
+    return "\n".join(lines)
+
+
+def _editable_remove_detail(spec) -> str:
+    """Build one detailed remove table for one endpoint."""
+
+    dependencies = ", ".join(spec.dependency_rules) or "No explicit dependency rules"
+    lines = [
+        f"#### `m.remove.{spec.path}()`",
+        "",
+        "| Input | Required | Type | Default | Conditions / validation |",
+        "| --- | --- | --- | --- | --- |",
+        "| `ids` | Yes | one `str` ID or `list[str]` | None | Every ID must already exist. |",
+        "| `force` | No | `bool` | `False` | Without force, dependencies block removal. With force, only conservative safe cascades run. |",
+        "",
+        f"- **Dependency rules:** {dependencies}",
+        "- **Return value:** `{'removed': [...], 'warnings': [...], 'dependencies_removed': [...]}`",
+        f"- **Implementation status:** {_editable_status(spec)}",
+        f"- **Example:** `m.remove.{spec.path}('ID')`",
+    ]
+    return "\n".join(lines)
+
+
 def _get_notebook(model) -> dict:
     """Build the complete getter reference notebook."""
 
@@ -433,12 +693,117 @@ def _set_notebook(model) -> dict:
     }
 
 
+def _add_notebook() -> dict:
+    """Build the complete add-reference notebook."""
+
+    categories = list(dict.fromkeys(spec.category for spec in EDITABLE_ELEMENT_SPECS))
+    cells = [
+        _md(
+            "# swmmx: all `add` functions\n\n"
+            "This notebook is a categorized reference for every public add endpoint in `swmmx`.\n\n"
+            "Add pattern:\n\n"
+            "```python\n"
+            "m.add.<category>.<element_type>(id, **options)\n"
+            "```\n\n"
+            "- The first argument is always the new object ID.\n"
+            "- Implemented endpoints create records, mark the model modified, and invalidate stale results.\n"
+            "- Reserved endpoints are intentionally visible for autocomplete but raise `NotImplementedYetError` until implemented.\n"
+            "- Node-like additions require explicit `x`/`y` map coordinates.\n"
+            "- Subcatchments require explicit centroid `x`/`y`; an optional polygon can still define their outline.\n"
+        ),
+        _code(
+            "from swmmx import swmm\n\n"
+            "m = swmm(new='SI')\n"
+            "# Build on this scratch model when trying the examples below.\n"
+        ),
+        _md(
+            "## Common add patterns\n\n"
+            "```python\n"
+            "m.add.node.junction('J1', x=0.0, y=0.0, invert_elevation=10.0, max_depth=3.0)\n"
+            "m.add.node.outfall('OUT1', x=100.0, y=0.0, invert_elevation=9.0, type='FREE')\n"
+            "m.add.link.conduit('C1', from_node='J1', to_node='OUT1', roughness=0.013)\n"
+            "m.add.hydrology.subcatchment('S1', rain_gage='RG1', outlet='J1', x=0.0, y=0.0)\n"
+            "```\n"
+        ),
+    ]
+    for group_title, group_categories in _grouped_editable_categories(categories):
+        cells.append(_md(f"## {group_title}"))
+        for category in group_categories:
+            cells.append(_md(_editable_add_overview(category)))
+            for spec in _editable_specs_for_category(category):
+                cells.append(_md(_editable_add_detail(spec)))
+    return _notebook(cells)
+
+
+def _remove_notebook() -> dict:
+    """Build the complete remove-reference notebook."""
+
+    categories = list(dict.fromkeys(spec.category for spec in EDITABLE_ELEMENT_SPECS))
+    cells = [
+        _md(
+            "# swmmx: all `remove` functions\n\n"
+            "This notebook is a categorized reference for every public remove endpoint in `swmmx`.\n\n"
+            "Remove pattern:\n\n"
+            "```python\n"
+            "m.remove.<category>.<element_type>(ids, force=False)\n"
+            "```\n\n"
+            "- `ids` can be one string ID or a list of string IDs.\n"
+            "- By default, referenced objects are protected from unsafe removal.\n"
+            "- `force=True` only performs conservative cascades that are implemented safely; otherwise a clear error is raised.\n"
+            "- Successful removals return a summary dictionary and invalidate stale results.\n"
+        ),
+        _code(
+            "from swmmx import swmm\n\n"
+            "m = swmm(new='SI')\n"
+            "# Use a scratch model or clone before experimenting with removals.\n"
+        ),
+        _md(
+            "## Common remove patterns\n\n"
+            "```python\n"
+            "m.remove.link.conduit('C1')\n"
+            "m.remove.node.junction(['J1', 'J2'])\n"
+            "m.remove.node.junction('J1', force=True)\n"
+            "```\n"
+        ),
+    ]
+    for group_title, group_categories in _grouped_editable_categories(categories):
+        cells.append(_md(f"## {group_title}"))
+        for category in group_categories:
+            cells.append(_md(_editable_remove_overview(category)))
+            for spec in _editable_specs_for_category(category):
+                cells.append(_md(_editable_remove_detail(spec)))
+    return _notebook(cells)
+
+
+def _notebook(cells: list[dict]) -> dict:
+    """Return shared notebook metadata around prebuilt cells."""
+
+    return {
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {
+                "display_name": "Python 3",
+                "language": "python",
+                "name": "python3",
+            },
+            "language_info": {
+                "name": "python",
+                "version": "3",
+            },
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+
+
 def main() -> None:
-    """Generate both API reference notebooks from the current public catalog."""
+    """Generate all API reference notebooks from the current public catalog."""
 
     model = swmm(EXAMPLE)
     GET_NOTEBOOK.write_text(json.dumps(_get_notebook(model), indent=2), encoding="utf-8")
     SET_NOTEBOOK.write_text(json.dumps(_set_notebook(model), indent=2), encoding="utf-8")
+    ADD_NOTEBOOK.write_text(json.dumps(_add_notebook(), indent=2), encoding="utf-8")
+    REMOVE_NOTEBOOK.write_text(json.dumps(_remove_notebook(), indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

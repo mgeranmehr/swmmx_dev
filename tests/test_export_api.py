@@ -85,7 +85,7 @@ def test_export_default_path_uses_model_folder_or_current_directory(tmp_path, mo
     assert outputs["nodes"].parent == model_path.parent
 
     unsaved_model = swmm(new="SI")
-    unsaved_model.add.node.junction("J1")
+    unsaved_model.add.node.junction("J1", x=0.0, y=0.0)
     monkeypatch.chdir(tmp_path)
     unsaved_outputs = unsaved_model.export.csv(elements=["junctions"], include_results=False, overwrite=True)
     assert unsaved_outputs["junctions"].parent == tmp_path

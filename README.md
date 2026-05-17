@@ -19,7 +19,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.18` currently provides:
+Version `0.0.19` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -43,26 +43,26 @@ m = swmm(new="US", flow_unit="GPM")      # new US model
 
 ## Examples
 
-The repository includes a small learning suite in [`examples/`](https://github.com/mgeranmehr/swmmx_dev/tree/main/examples). The main scripts are fuller runnable demonstrations that include validation, safer branching, and file-output handling. The [`examples/simple/`](https://github.com/mgeranmehr/swmmx_dev/tree/main/examples/simple) folder contains the same ten topics in flatter teaching form: no `main()` function, no `try` blocks, and fewer defensive branches, so the API is easier to read line by line.
+The repository includes a small learning suite in [`examples/`](https://github.com/mgeranmehr/swmmx_dev/tree/main/examples). The main folder now holds the simplest teaching scripts: no `main()` function, no `try` blocks, and fewer defensive branches, so the API is easy to read line by line. The fuller runnable versions live in [`examples/standard/`](https://github.com/mgeranmehr/swmmx_dev/tree/main/examples/standard), where they include validation, safer branching, and file-output handling.
 
-| Topic | Standard example | Simple learning version |
+| Topic | Simple learning version | Standard example |
 | --- | --- | --- |
-| Open, validate, and run | [`01_open_validate_run.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/01_open_validate_run.py) | [`simple/01_open_validate_run.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/01_open_validate_run.py) |
-| Modify conduit diameters and compare | [`02_modify_conduit_diameters_compare.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/02_modify_conduit_diameters_compare.py) | [`simple/02_modify_conduit_diameters_compare.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/02_modify_conduit_diameters_compare.py) |
-| Step-by-step runs | [`03_step_by_step_runs_dynamic_control.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/03_step_by_step_runs_dynamic_control.py) | [`simple/03_step_by_step_runs_dynamic_control.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/03_step_by_step_runs_dynamic_control.py) |
-| Layout plots | [`04_plot_layout_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/04_plot_layout_examples.py) | [`simple/04_plot_layout_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/04_plot_layout_examples.py) |
-| Time-series plots | [`05_plot_timeseries_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/05_plot_timeseries_examples.py) | [`simple/05_plot_timeseries_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/05_plot_timeseries_examples.py) |
-| Profile plots | [`06_plot_profile_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/06_plot_profile_examples.py) | [`simple/06_plot_profile_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/06_plot_profile_examples.py) |
-| GIS/CSV/Excel export | [`07_export_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/07_export_examples.py) | [`simple/07_export_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/07_export_examples.py) |
-| Time and count helpers | [`08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/08_time_and_count_functions.py) | [`simple/08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/08_time_and_count_functions.py) |
-| Get/set patterns | [`09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/09_get_set_examples.py) | [`simple/09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/09_get_set_examples.py) |
-| Build a model from scratch | [`10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/10_create_model_from_scratch_add_remove.py) | [`simple/10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/simple/10_create_model_from_scratch_add_remove.py) |
+| Open, validate, and run | [`01_open_validate_run.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/01_open_validate_run.py) | [`standard/01_open_validate_run.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/01_open_validate_run.py) |
+| Modify conduit diameters and compare | [`02_modify_conduit_diameters_compare.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/02_modify_conduit_diameters_compare.py) | [`standard/02_modify_conduit_diameters_compare.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/02_modify_conduit_diameters_compare.py) |
+| Step-by-step runs | [`03_step_by_step_runs_dynamic_control.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/03_step_by_step_runs_dynamic_control.py) | [`standard/03_step_by_step_runs_dynamic_control.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/03_step_by_step_runs_dynamic_control.py) |
+| Layout plots | [`04_plot_layout_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/04_plot_layout_examples.py) | [`standard/04_plot_layout_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/04_plot_layout_examples.py) |
+| Time-series plots | [`05_plot_timeseries_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/05_plot_timeseries_examples.py) | [`standard/05_plot_timeseries_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/05_plot_timeseries_examples.py) |
+| Profile plots | [`06_plot_profile_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/06_plot_profile_examples.py) | [`standard/06_plot_profile_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/06_plot_profile_examples.py) |
+| GIS/CSV/Excel export | [`07_export_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/07_export_examples.py) | [`standard/07_export_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/07_export_examples.py) |
+| Time and count helpers | [`08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/08_time_and_count_functions.py) | [`standard/08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/08_time_and_count_functions.py) |
+| Get/set patterns | [`09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/09_get_set_examples.py) | [`standard/09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/09_get_set_examples.py) |
+| Build a model from scratch | [`10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/10_create_model_from_scratch_add_remove.py) | [`standard/10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/10_create_model_from_scratch_add_remove.py) |
 
 Run them from the repository root:
 
 ```bash
 python examples/01_open_validate_run.py
-python examples/simple/01_open_validate_run.py
+python examples/standard/01_open_validate_run.py
 ```
 
 The examples use `examples/example.inp`, avoid overwriting it, and write generated files into `examples/output/`.
@@ -141,8 +141,8 @@ from swmmx import swmm
 
 m = swmm(new="SI")
 
-m.add.node.junction("J1", invert_elevation=10, max_depth=3)
-m.add.node.outfall("OUT1", invert_elevation=9, type="FREE")
+m.add.node.junction("J1", x=0.0, y=0.0, invert_elevation=10, max_depth=3)
+m.add.node.outfall("OUT1", x=100.0, y=0.0, invert_elevation=9, type="FREE")
 
 m.add.link.conduit(
     "C1",
@@ -169,6 +169,14 @@ m.add.hydrology.rain_gage(
     source_type="TIMESERIES",
     time_series="Rain1",
 )
+m.add.hydrology.subcatchment(
+    "S1",
+    rain_gage="RG1",
+    outlet="J1",
+    x=0.0,
+    y=0.0,
+    area=1.0,
+)
 
 m.save("new_model.inp")
 
@@ -177,20 +185,27 @@ m.remove.link.conduit("C1")
 
 The add API validates IDs, required fields, numeric values, enums, and references before it writes EPA SWMM records. The remove API validates dependencies before deletion; by default it refuses unsafe removals, while `force=True` performs only conservative cascades that are known to remain valid. For example, removing a node with `force=True` can remove dependent conduits, but unsupported cascades raise a clear error instead of leaving broken references.
 
-When coordinates are omitted, `swmmx` uses practical display defaults:
+Coordinate handling is explicit where geometry is part of the object definition:
 
-- new nodes use `x = max(node x) + 100`, `y = max(node y)`, or `(0, 0)` when the model has no node coordinates;
-- new rain gages use the maximum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates;
-- new subcatchments use the minimum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates.
+- new node objects require `x` and `y` map coordinates;
+- new subcatchments require `x` and `y` centroid coordinates, while `polygon=` remains the optional outline geometry;
+- new rain gages may still omit coordinates, in which case `swmmx` uses the maximum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates.
 
 Every add or remove operation sets `m.modified` to `True`. If the model already had results, the edit also sets `m.results_stale` to `True` and invalidates the old result accessors until the model is run again.
 
 Generic fallbacks are also available:
 
 ```python
-m.add_element("node", "junction", "J2", invert_elevation=11, max_depth=2)
+m.add_element("node", "junction", "J2", x=200.0, y=0.0, invert_elevation=11, max_depth=2)
 m.remove_element("node", "junction", "J2")
 ```
+
+### Add/remove reference notebooks
+
+For a full constructor/removal reference, see:
+
+- [`examples/13_all_add_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/13_all_add_functions.ipynb): every `m.add.<category>.<element_type>()` endpoint, grouped by category, with tables for required inputs, optional inputs, types, defaults, coordinate rules, references, implementation status, and conditions.
+- [`examples/14_all_remove_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/14_all_remove_functions.ipynb): every `m.remove.<category>.<element_type>()` endpoint, grouped by category, with tables for `ids`, `force`, dependency checks, removal summaries, implementation status, and safe-cascade behavior.
 
 ## Plotting
 

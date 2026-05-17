@@ -1,82 +1,79 @@
-"""04 - Create several network layout plots."""
+﻿"""04 simple - Save a few network layout plots."""
+
+from pathlib import Path
+
+#import matplotlib
+#matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
 
 from swmmx import swmm
 
-from _helpers import get_example_path, get_output_dir, print_header, save_working_copy
 
+examples_dir = Path(__file__).resolve().parent
+output_dir = examples_dir / "output"
+output_dir.mkdir(parents=True, exist_ok=True)
 
-def main() -> None:
-    """Render static, parameter-driven, result-driven, and user-driven maps."""
+m = swmm(examples_dir / "example.inp")
+m.save(output_dir / "simple_04_working_copy.inp")
+m.run()
 
-    print_header("04 - Plot layout examples")
-    output_dir = get_output_dir()
-    model = swmm(get_example_path())
-    save_working_copy(model, "04_plot_layout_working_copy.inp")
-    model.run()
+fig, _ = m.plot_layout(show=False, save_path=output_dir / "simple_layout_basic.png")
+plt.close(fig)
 
-    model.plot_layout(show=False, save_path=output_dir / "layout_default.png")
-    model.plot_layout(
-        title="Network Layout",
-        grid=True,
-        axis=True,
-        show=False,
-        save_path=output_dir / "layout_basic.png",
-    )
-    model.plot_layout(
-        nodes={"size": 45, "color": "black", "edge_color": "white"},
-        links={"width": 2.0, "color": "slategray"},
-        subcatchments={"color": "lightgreen", "edge_color": "green", "alpha": 0.30},
-        show=False,
-        save_path=output_dir / "layout_custom_styles.png",
-    )
-    model.plot_layout(
-        links={
-            "color": {
-                "by": "parameter",
-                "category": "conduit",
-                "variable": "roughness",
-                "mode": "continuous",
-                "cmap": "viridis",
-                "legend_title": "Roughness",
-            }
-        },
-        show=False,
-        save_path=output_dir / "layout_by_roughness.png",
-    )
-    model.plot_layout(
-        links={
-            "color": {
-                "by": "result",
-                "category": "link",
-                "variable": "flow",
-                "aggregation": "max",
-                "mode": "continuous",
-                "cmap": "plasma",
-                "legend_title": "Max flow",
-            }
-        },
-        show=False,
-        save_path=output_dir / "layout_by_max_flow.png",
-    )
+fig, _ = m.plot_layout(
+    title="Network Layout",
+    grid=True,
+    axis=True,
+    show=True,
+    save_path=output_dir / "simple_layout_axes.png",
+)
+plt.close(fig)
 
-    link_ids = model.get.conduit.id(format="df").columns.tolist()
-    risk_scores = {link_id: index % 3 for index, link_id in enumerate(link_ids, start=1)}
-    model.plot_layout(
-        links={
-            "color": {
-                "by": "user",
-                "data": risk_scores,
-                "mode": "discrete",
-                "cmap": "tab10",
-                "legend_title": "Risk score",
-            }
-        },
-        show=False,
-        save_path=output_dir / "layout_by_user_risk.png",
-    )
-    print(f"Saved layout plots to: {output_dir}")
+fig, _ = m.plot_layout(
+    nodes={"size": 40, "color": "black"},
+    links={"width": 2.0, "color": "gray"},
+    subcatchments={"color": "lightgreen", "edge_color": "green"},
+    show=True,
+    save_path=output_dir / "simple_layout_custom_styles.png",
+)
+plt.close(fig)
 
+fig, _ = m.plot_layout(
+    links={
+        "color": {
+            "by": "parameter",
+            "category": "conduit",
+            "variable": "roughness",
+            "mode": "continuous",
+            "cmap": "viridis",
+        }
+    },
+    show=True,
+    save_path=output_dir / "simple_layout_by_roughness.png",
+)
+plt.close(fig)
 
-if __name__ == "__main__":
-    main()
+fig, _ = m.plot_layout(
+    links={
+        "color": {
+            "by": "result",
+            "category": "link",
+            "variable": "flow",
+            "aggregation": "max",
+            "mode": "continuous",
+        }
+    },
+    show=True,
+    save_path=output_dir / "simple_layout_by_max_flow.png",
+)
+plt.close(fig)
+
+risk_score = {"P001": 1, "P005": 2, "P009": 1, "P011": 3}
+fig, _ = m.plot_layout(
+    links={"color": {"by": "user", "data": risk_score, "mode": "discrete"}},
+    show=True,
+    save_path=output_dir / "simple_layout_by_user_risk.png",
+)
+plt.close(fig)
 
