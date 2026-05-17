@@ -50,6 +50,13 @@ def normalize_source(source: str) -> str:
     lowered = str(source).strip().lower()
     if lowered in {"user", "ref", "derived", "result"}:
         return lowered
+    parts = {part.strip() for part in lowered.split("/") if part.strip()}
+    if "user" in parts or "ref" in parts:
+        # Hybrid editable rows such as ``ref/user`` or ``user/derived`` still
+        # have a user-authored input component.  Treating them as writable lets
+        # explicit setter calls reach the real implementation boundary rather
+        # than being mislabeled as read-only.
+        return "ref" if "ref" in parts else "user"
     return "mixed"
 
 
@@ -236,6 +243,38 @@ RESULT_OBJECT_KIND = {
     "outfall": "node",
 }
 
+RESULT_VARIABLES = {
+    "subcatchment": {
+        "rainfall",
+        "snow_depth",
+        "evaporation",
+        "infiltration",
+        "runoff",
+        "groundwater_flow",
+        "groundwater_elevation",
+        "soil_moisture",
+    },
+    "node": {"depth", "head", "volume", "lateral_inflow", "total_inflow", "flooding", "overflow"},
+    "link": {"flow", "depth", "velocity", "volume", "capacity"},
+    "system_result": {
+        "air_temperature",
+        "rainfall",
+        "snow_depth",
+        "evaporation",
+        "infiltration",
+        "runoff",
+        "dry_weather_inflow",
+        "groundwater_inflow",
+        "rdii_inflow",
+        "direct_inflow",
+        "total_lateral_inflow",
+        "flooding",
+        "outflow",
+        "volume",
+        "evaporation_loss",
+    },
+}
+
 
 class ParameterCatalog:
     """Public parameter catalog plus the small physical mapping in this release."""
@@ -276,7 +315,7 @@ class ParameterCatalog:
         names: list[str] = []
         for main_api, raw_main in self._categories_by_api_name.items():
             specs = [spec for spec in self._specs.values() if spec.main_category == raw_main]
-            if mode == "get" or any(spec.is_writable for spec in specs):
+            if any(self.is_supported(spec, mode) for spec in specs):
                 names.append(main_api)
         return sorted(names)
 
@@ -286,9 +325,48 @@ class ParameterCatalog:
         names: list[str] = []
         for sub_api, raw_sub in self._subcategories_by_api_name[raw_main].items():
             spec = self._specs[(raw_main, raw_sub)]
-            if mode == "get" or spec.is_writable:
+            if self.is_supported(spec, mode):
                 names.append(sub_api)
         return sorted(names)
+
+    def is_supported(self, spec: ParameterSpec, mode: str) -> bool:
+        """Return whether one path has a concrete implementation in this runtime."""
+
+        if mode == "get":
+            return self._supports_get(spec)
+        if mode == "set":
+            return self._supports_set(spec)
+        raise ValueError(f"Unknown access mode '{mode}'.")
+
+    def _supports_get(self, spec: ParameterSpec) -> bool:
+        """Return whether a getter can execute without a structural placeholder."""
+
+        if spec.main_category.startswith("option_"):
+            return spec.sub_category in OPTION_FIELDS
+        if spec.source_kind == "result":
+            if spec.main_category == "system_result":
+                return spec.sub_category in RESULT_VARIABLES["system_result"]
+            object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
+            return object_kind is not None and spec.sub_category in RESULT_VARIABLES[object_kind]
+        if spec.source_kind == "derived":
+            return (
+                spec.sub_category == "count"
+                and spec.main_category in OBJECT_SECTIONS
+            ) or spec.key in {
+                ("conduit", "slope"),
+                ("node", "type"),
+                ("link", "type"),
+            }
+        return spec.key in INPUT_FIELDS
+
+    def _supports_set(self, spec: ParameterSpec) -> bool:
+        """Return whether a setter can execute without a structural placeholder."""
+
+        if not spec.is_writable:
+            return False
+        if spec.main_category.startswith("option_"):
+            return spec.sub_category in OPTION_FIELDS
+        return spec.key in INPUT_FIELDS
 
     def raw_category(self, main_api_name: str) -> str:
         """Return the original category behind one safe API name."""
@@ -531,6 +609,9 @@ def coerce_value(value: str, declared_type: str) -> Any:
 
 def normalize_ids(ids, available_ids: list[str], category: str) -> tuple[list[str], bool]:
     """Normalize user ID input and report whether exactly one ID was requested."""
+
+    if not available_ids:
+        raise ObjectNotFoundError(f"No {category} objects are available in this model.")
 
     if ids is None:
         selected = list(available_ids)

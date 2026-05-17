@@ -13,13 +13,13 @@
 ```python
 from swmmx import swmm
 
-m = swmm("example/example.inp")
+m = swmm("examples/example.inp")
 print(m.time.count())
 result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.14` currently provides:
+Version `0.0.15` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -35,7 +35,7 @@ Version `0.0.14` currently provides:
 Constructor examples:
 
 ```python
-m = swmm("example/example.inp")          # open an existing model
+m = swmm("examples/example.inp")         # open an existing model
 m = swmm()                               # new SI model, LPS by default
 m = swmm(new="SI", flow_unit="CMS")      # new SI model
 m = swmm(new="US", flow_unit="GPM")      # new US model
@@ -83,7 +83,7 @@ m.set.conduit.roughness(0.013)
 m.set.conduit.roughness([0.013, 0.014], ids=["P001", "P005"])
 ```
 
-Supported getters default to NumPy output; `format="df"` gives pandas output. Writable parameters appear in `dir(m.set.<category>)`; attempting to set a derived or result parameter raises a read-only error.
+Supported getters default to NumPy output; `format="df"` gives pandas output. `dir(m.get.<category>)` and `dir(m.set.<category>)` show the functions that are implemented in the installed build. Attempting to set a derived or result parameter raises a read-only error, and requesting an object collection that is absent from the model raises a clear missing-object error.
 
 ## Counts
 

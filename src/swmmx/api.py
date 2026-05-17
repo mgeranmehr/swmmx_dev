@@ -320,7 +320,11 @@ class SWMMModel:
             )
         value = self._document.get_option(option_key)
         if value is None:
-            raise KeyError(f"Required option '{option_key}' is not present in this model.")
+            # SWMM input files are allowed to omit many options and let the
+            # engine use its built-in defaults.  Returning ``None`` keeps the
+            # getter usable for sparse but valid files instead of leaking a raw
+            # ``KeyError`` from an implementation detail.
+            return None
         return coerce_value(value, spec.type)
 
     def _set_option_parameter(self, spec: ParameterSpec, value) -> None:
@@ -376,6 +380,19 @@ class SWMMModel:
             raise ModelNotRunError(
                 f"'{spec.path}' is a result variable. Run the model first with m.run()."
             )
+
+        if spec.main_category == "system_result":
+            if ids is not None:
+                raise ValueError(f"'{spec.path}' is a system-wide result and does not accept 'ids'.")
+            if self._output_file_cache is None or self._output_file_cache.path != self._last_output_path:
+                self._output_file_cache = OutputFile(self._last_output_path)
+            try:
+                series = self._output_file_cache.system_series(spec.sub_category)
+            except KeyError as exc:
+                raise NotImplementedYetError(
+                    f"Result access for '{spec.path}' is not implemented yet."
+                ) from exc
+            return self._format_time_values(series.reshape(-1, 1), [spec.sub_category], True, format=format)
 
         object_kind = RESULT_OBJECT_KIND.get(spec.main_category)
         if object_kind is None:
