@@ -928,7 +928,7 @@ def _layout_layer_example_text() -> str:
                     # 'aggregation': 'max',      # Result reducer.
                     # 'time_step': -1,           # Single result row instead of aggregation.
                     # 'time': '2026-01-01 01:00',  # Single result timestamp instead of aggregation.
-                    'legend': True,              # Add a result colorbar/legend.
+                    'legend': True,              # Add a result-driven custom legend section.
                     'legend_title': 'Link class',
                 },
                 'linestyle': '-',               # Fallback line style.
@@ -969,7 +969,7 @@ def _layout_layer_example_text() -> str:
                     # 'aggregation': 'max',      # Result reducer when by='result'.
                     # 'time_step': -1,           # Single result row when by='result'.
                     # 'time': '2026-01-01 01:00',  # Single result timestamp when by='result'.
-                    'legend': True,              # Add a colorbar/legend for the fill encoding.
+                    'legend': True,              # Add a custom legend section for the fill encoding.
                     'legend_title': 'Subcatchment area',
                 },
                 'edge_color': 'green',           # Polygon boundary color.
@@ -1101,7 +1101,7 @@ def _plot_notebook(model) -> dict:
         ["`vmin`, `vmax`", "numeric bounds", "Optional continuous color scaling bounds."],
         ["`aggregation`", "`last`, `max`, `min`, `mean`, `median`, or `sum`", "Collapse result time series to one value per object."],
         ["`time_step`, `time`", "integer index or timestamp-like value", "Select one result instant instead of aggregating."],
-        ["`legend`, `legend_title`", "`bool`, `str`", "Control the dedicated custom-style legend section or labeled colorbar."],
+        ["`legend`, `legend_title`", "`bool`, `str`", "Control the dedicated custom-style legend section."],
         ["`min_size`, `max_size`", "numeric bounds", "Node-size scaling bounds."],
         ["`min_width`, `max_width`", "numeric bounds", "Link-width scaling bounds."],
         ["`labels`, `bins`", "sequence metadata", "Accepted style metadata for discrete presentation; labels are used for color categories."],
@@ -1113,27 +1113,25 @@ def _plot_notebook(model) -> dict:
         ["`title`", "`str | None`", "`None`", "Optional title; otherwise generated from category and variable."],
         ["`legend_title`", "`str | None`", "`None`", "Optional legend title."],
         ["`axis`", "`bool`", "`True`", "Show axes and ticks."],
-        ["`x_axis_title`", "`str | None`", "`None`", "Optional x-axis title; defaults to Time or elapsed hours."],
-        ["`y_axis_title`", "`str | None`", "`None`", "Optional y-axis title; defaults to variable name plus `unit`."],
+        ["`x_axis_title`", "`str | None`", "`None`", "Optional x-axis title; defaults from the selected time format."],
+        ["`y_axis_title`", "`str | None`", "`None`", "Optional y-axis title; defaults to the variable name."],
         ["`save_format`", "`str | None`", "`None`", "Optional save format."],
         ["`save_path`", "`str | Path | None`", "`None`", "Optional file path or existing folder target."],
         ["`figsize`", "`tuple[float, float]`", "`(10, 4)`", "Figure size when `ax` is not supplied."],
         ["`dpi`", "`int`", "`300`", "Figure resolution."],
         ["`ax`", "matplotlib `Axes | None`", "`None`", "Compose into existing axes."],
         ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
-        ["`unit`", "`str | None`", "`None`", "Optional unit text appended to the y-axis label."],
-        ["`time_format`", "`'timestamp' | 'elapsed'`", "`'timestamp'`", "Use timestamp x-values or elapsed hours."],
+        ["`time_format`", "`'datetime' | 'clock' | 'elapsed'`", "`'datetime'`", "Use full date-time labels, hour-minute labels, or elapsed hours."],
         ["`start_time`, `end_time`", "timestamp-like", "`None`", "Optional time-window filters."],
         ["`labels`", "`dict | list | tuple | None`", "`None`", "Custom line labels by column name or plot order."],
         ["`linewidth`", "`float`", "`1.5`", "Line width."],
         ["`linestyle`", "`str`", "`'-'`", "Matplotlib line style."],
         ["`marker`", "matplotlib marker or `None`", "`None`", "Optional point marker."],
         ["`alpha`", "`float`", "`1.0`", "Line transparency."],
-        ["`max_series`", "`int | None`", "`None`", "Optional guardrail against plotting too many columns."],
     ]
     profile_endpoint_rows = [
         ["`m.plot_profile.nodes(start_node, end_node, ...)`", "Existing start/end node IDs", "Find a directed hydraulic path between nodes, then plot it."],
-        ["`m.plot_profile.links(ids, ...)`", "One ordered link ID or list of link IDs", "Validate connected order, then plot exactly that sequence."],
+        ["`m.plot_profile.links(ids, ...)`", "One ordered link ID or list of link IDs", "Validate connected order in either direction, then plot exactly that sequence."],
         ["`m.plot_profile.longest(...)`", "No path selector", "Find the longest directed conduit path and plot it."],
     ]
     profile_options = [
@@ -1152,7 +1150,7 @@ def _plot_notebook(model) -> dict:
         ["`dpi`", "`int`", "`300`", "Figure resolution."],
         ["`ax`", "matplotlib `Axes | None`", "`None`", "Compose into existing axes."],
         ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
-        ["`unit_length`, `unit_elevation`", "`str | None`", "`None`", "Optional axis-unit labels."],
+        ["`unit_length`, `unit_elevation`", "`str | None`", "`None`", "Optional axis-unit overrides; otherwise inferred from the model flow-unit family."],
         ["`show_ground`", "`bool`", "`True`", "Draw approximated ground line."],
         ["`show_conduits`", "`bool`", "`True`", "Draw conduit barrels."],
         ["`show_invert`", "`bool`", "`True`", "Draw node invert line."],
@@ -1161,10 +1159,11 @@ def _plot_notebook(model) -> dict:
         ["`show_egl`", "`bool`", "`False`", "Request energy grade line; currently warns and skips because EGL is not exposed."],
         ["`show_water_depth`", "`bool`", "`False`", "Draw water level; requires results."],
         ["`show_node_labels`", "`bool`", "`True`", "Annotate nodes."],
-        ["`show_link_labels`", "`bool`", "`False`", "Annotate links."],
+        ["`show_link_labels`", "`bool`", "`True`", "Annotate links on their conduit barrels."],
+        ["`show_node_guides`", "`bool`", "`True`", "Draw vertical dotted lines at node locations."],
         ["`show_surcharge`", "`bool`", "`True`", "Mark surcharge locations when results are available."],
         ["`show_flooding`", "`bool`", "`True`", "Mark flooding locations when results are available."],
-        ["`fill_conduits`", "`bool`", "`False`", "Fill conduit polygons instead of drawing a thicker barrel line."],
+        ["`fill_conduits`", "`bool`", "`True`", "Shade conduit barrels between invert and crown."],
         ["`line_styles`", "`dict[str, str] | None`", "`None`", "Override styles for `ground`, `invert`, `crown`, `hgl`, or `water`."],
         ["`colors`", "`dict[str, str] | None`", "`None`", "Override colors for `ground`, `invert`, `crown`, `conduit`, `hgl`, `water`, `flooding`, or `surcharge`."],
     ]
@@ -1237,6 +1236,7 @@ def _plot_notebook(model) -> dict:
             "Elements with unusable coordinates are skipped with warnings; if no plottable geometry exists, the call raises `PlotDataError`. "
             "Subcatchment centroids are derived from polygon geometry, then connected to outlet nodes or downstream subcatchments with dashed lines. "
             "Node/link symbology is type-aware by default, and LID usage markers are drawn at subcatchment centroids when present. "
+            "Titles, grids, and visible coordinate axes use safe ordinary artists instead of Matplotlib's native title/tick/grid machinery, avoiding the Spyder/Agg recursive tick-copy path. "
             "On non-interactive matplotlib canvases such as Agg, `show=True` avoids useless GUI calls but keeps the figure available for Spyder/Jupyter rendering; `show=False` removes only the library-created figure manager so hidden plots stay hidden.\n\n"
             + _table(["Input", "Type", "Default", "Meaning"], layout_options)
         ),
@@ -1293,7 +1293,10 @@ def _plot_notebook(model) -> dict:
         _md(
             "## `m.plot_timeseries.<category>.<variable>()`\n\n"
             "Time-series endpoints are generated dynamically from public result variables. "
-            "They require a completed run and use a timestamp index by default.\n\n"
+            "They require a completed run and use a timestamp index by default. "
+            "Their titles, grids, ticks, and axis labels use safe ordinary artists instead of native Matplotlib "
+            "`Axis` artists, while legends use lightweight proxy lines rather than cloning the plotted artists. "
+            "Together those two choices avoid the Spyder/Agg recursive marker-copy paths.\n\n"
             + _table(["Input", "Type", "Default", "Meaning"], timeseries_options)
         ),
         _md("### Available time-series variables\n\n" + _plot_timeseries_catalog(model)),
@@ -1303,6 +1306,7 @@ def _plot_notebook(model) -> dict:
             "m.run()\n"
             "m.plot_timeseries.link.flow(['C1', 'C2'])\n"
             "m.plot_timeseries.node.depth('J1', title='Node depth')\n"
+            "m.plot_timeseries.link.flow('C1', time_format='clock')\n"
             "m.plot_timeseries.system.runoff(time_format='elapsed')\n"
             "```\n"
         ),
@@ -1330,7 +1334,7 @@ def _plot_notebook(model) -> dict:
             "### Profile examples\n\n"
             "```python\n"
             "m.plot_profile.nodes('J1', 'OUT1', show_hgl=True, aggregation='max')\n"
-            "m.plot_profile.links(['C1', 'C2', 'C3'], show_ground=True, show_conduits=True)\n"
+            "m.plot_profile.links(['C1', 'C2', 'C3'])  # connected walks may follow or oppose hydraulic direction\n"
             "m.plot_profile.longest(show_hgl=True, aggregation='max')\n"
             "```\n"
         ),

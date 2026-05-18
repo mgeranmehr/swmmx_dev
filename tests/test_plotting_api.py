@@ -1,4 +1,5 @@
 from pathlib import Path
+import inspect
 import warnings
 
 import matplotlib
@@ -8,6 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pytest
 from matplotlib.figure import Figure
+from matplotlib.axis import Axis
 from matplotlib.legend_handler import HandlerLine2D
 from matplotlib.markers import MarkerStyle
 
@@ -59,15 +61,105 @@ def test_plot_layout_avoids_show_on_noninteractive_canvas(monkeypatch):
     _close(fig)
 
     fig, ax = model.plot_layout(axis=True, grid=True, title="Model Layout", show=False)
-    assert ax.axison
-    assert ax.get_title() == "Model Layout"
-    assert any(line.get_visible() for line in ax.get_xgridlines() + ax.get_ygridlines())
+    assert not ax.axison
+    assert any(line.get_label() == "_swmmx_grid" for line in ax.lines)
+    assert any(line.get_label() == "_swmmx_axis_frame" for line in ax.lines)
+    assert any(text.get_label() == "_swmmx_axis_label" and text.get_text() == "X Coordinate" for text in ax.texts)
+    assert any(text.get_label() == "_swmmx_axis_label" and text.get_text() == "Y Coordinate" for text in ax.texts)
     _close(fig)
 
     # `grid=True` is useful even when coordinate labels remain hidden.
     fig, ax = model.plot_layout(grid=True, show=False)
-    assert any(line.get_visible() for line in ax.get_xgridlines() + ax.get_ygridlines())
-    assert not any(label.get_visible() for label in ax.get_xticklabels() + ax.get_yticklabels())
+    assert not ax.axison
+    assert any(line.get_label() == "_swmmx_grid" for line in ax.lines)
+    assert not any(text.get_label() == "_swmmx_axis_label" for text in ax.texts)
+    _close(fig)
+
+
+def test_plot_layout_grid_and_axis_do_not_draw_native_axis_artists(monkeypatch):
+    model = swmm(EXAMPLE)
+
+    def _forbid_native_axis_draw(*_args, **_kwargs):
+        raise AssertionError("native matplotlib Axis artists should not draw for layout maps")
+
+    monkeypatch.setattr(Axis, "draw", _forbid_native_axis_draw)
+
+    fig, ax = model.plot_layout(grid=True, show=False)
+    fig.canvas.draw()
+    assert any(line.get_label() == "_swmmx_grid" for line in ax.lines)
+    _close(fig)
+
+    fig, ax = model.plot_layout(axis=True, show=False)
+    fig.canvas.draw()
+    assert any(line.get_label() == "_swmmx_axis_frame" for line in ax.lines)
+    _close(fig)
+
+
+@pytest.mark.parametrize(
+    ("plot_kwargs", "needs_run", "expected_title"),
+    [
+        (
+            {
+                "links": {
+                    "color": {
+                        "by": "parameter",
+                        "category": "conduit",
+                        "variable": "roughness",
+                        "mode": "continuous",
+                        "cmap": "viridis",
+                    }
+                }
+            },
+            False,
+            "Links color: conduit.roughness",
+        ),
+        (
+            {
+                "nodes": {"size": {"by": "result", "variable": "depth", "aggregation": "max"}},
+                "links": {
+                    "color": {
+                        "by": "result",
+                        "category": "link",
+                        "variable": "flow",
+                        "aggregation": "max",
+                    }
+                },
+            },
+            True,
+            "Links color: link.flow (max)",
+        ),
+        (
+            {
+                "link_color_by": "roughness",
+                "link_color_mode": "continuous",
+                "link_cmap": "viridis",
+            },
+            False,
+            "Links color: conduit.roughness",
+        ),
+    ],
+)
+def test_plot_layout_continuous_color_uses_safe_legend_sections_without_native_colorbars(
+    monkeypatch,
+    plot_kwargs,
+    needs_run,
+    expected_title,
+):
+    model = swmm(EXAMPLE)
+    if needs_run:
+        model.run()
+
+    def _forbid_native_axis_draw(*_args, **_kwargs):
+        raise AssertionError("native matplotlib Axis artists should not draw for layout maps")
+
+    monkeypatch.setattr(Axis, "draw", _forbid_native_axis_draw)
+
+    fig, ax = model.plot_layout(show=False, **plot_kwargs)
+    fig.canvas.draw()
+
+    legend_titles = [artist.get_title().get_text() for artist in ax.artists if artist.__class__.__name__ == "Legend"]
+    assert len(fig.axes) == 1
+    assert expected_title in legend_titles
     _close(fig)
 
 
@@ -79,9 +171,23 @@ def test_plot_layout_default_show_is_quiet_on_agg_and_remains_renderable():
         fig, ax = model.plot_layout(title="Model Layout")
 
     assert fig is ax.figure
-    assert ax.get_title() == "Model Layout"
+    assert any(text.get_text() == "Model Layout" for text in ax.texts)
     assert plt.fignum_exists(fig.number)
     assert not any("non-interactive" in str(item.message) for item in caught)
+    _close(fig)
+
+
+def test_plot_layout_hidden_axis_title_uses_safe_text_artist():
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(title="SWMM Model Layout", show=False)
+    fig.canvas.draw()
+
+    assert ax.get_title() == ""
+    assert any(
+        text.get_text() == "SWMM Model Layout" and text.get_label() == "_swmmx_layout_title"
+        for text in ax.texts
+    )
     _close(fig)
 
 
@@ -359,12 +465,79 @@ def test_plot_timeseries_requires_results_then_plots_link_and_node_series():
 
     model.run()
     fig, ax = model.plot_timeseries.link.flow(["P001", "P005"], show=False)
-    assert len(ax.lines) == 2
+    assert len([line for line in ax.lines if not line.get_label().startswith("_")]) == 2
     _close(fig)
 
     fig, ax = model.plot_timeseries.node.depth("P001", show=False)
-    assert len(ax.lines) == 1
+    assert len([line for line in ax.lines if not line.get_label().startswith("_")]) == 1
     _close(fig)
+
+
+def test_plot_timeseries_public_signature_and_time_formats_are_simplified():
+    model = swmm(EXAMPLE)
+    model.run()
+
+    parameters = inspect.signature(model.plot_timeseries.link.flow).parameters
+    assert "unit" not in parameters
+    assert "max_series" not in parameters
+
+    fig, ax = model.plot_timeseries.link.flow("P001", time_format="datetime", show=False)
+    assert any("-" in text.get_text() for text in ax.texts if text.get_label() == "_swmmx_axis_tick_label")
+    assert any(text.get_text() == "Date and Time" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
+    _close(fig)
+
+    fig, ax = model.plot_timeseries.link.flow("P001", time_format="clock", show=False)
+    assert any(":" in text.get_text() for text in ax.texts if text.get_label() == "_swmmx_axis_tick_label")
+    assert any(text.get_text() == "Time" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
+    _close(fig)
+
+    fig, ax = model.plot_timeseries.link.flow("P001", time_format="elapsed", show=False)
+    assert any(text.get_text() == "Elapsed Time (hours)" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
+    _close(fig)
+
+    with pytest.raises(PlotDataError, match="'time_format' must be 'datetime', 'clock', or 'elapsed'"):
+        model.plot_timeseries.link.flow("P001", time_format="timestamp", show=False)
+
+
+def test_plot_timeseries_legends_avoid_default_line2d_handler(monkeypatch):
+    model = swmm(EXAMPLE)
+    model.run()
+
+    def _forbid_default_handler(*_args, **_kwargs):
+        raise AssertionError("default HandlerLine2D should not be used")
+
+    monkeypatch.setattr(HandlerLine2D, "create_artists", _forbid_default_handler)
+
+    for plot_call in (
+        model.plot_timeseries.node.depth,
+        model.plot_timeseries.link.flow,
+        model.plot_timeseries.system.runoff,
+    ):
+        fig, ax = plot_call(show=False)
+        assert ax.get_legend() is not None
+        _close(fig)
+
+
+def test_plot_timeseries_axes_avoid_native_axis_artists(monkeypatch):
+    model = swmm(EXAMPLE)
+    model.run()
+
+    def _forbid_native_axis_draw(*_args, **_kwargs):
+        raise AssertionError("native matplotlib Axis artists should not draw for time-series plots")
+
+    monkeypatch.setattr(Axis, "draw", _forbid_native_axis_draw)
+
+    for plot_call in (
+        model.plot_timeseries.link.flow,
+        model.plot_timeseries.node.depth,
+        model.plot_timeseries.system.runoff,
+    ):
+        fig, ax = plot_call(show=False)
+        fig.canvas.draw()
+        assert not ax.axison
+        assert any(text.get_label() == "_swmmx_cartesian_title" for text in ax.texts)
+        assert any(line.get_label() == "_swmmx_axis_frame" for line in ax.lines)
+        _close(fig)
 
 
 def test_plot_timeseries_invalid_id_raises_unknown_id():
@@ -380,6 +553,16 @@ def test_plot_profile_validates_paths_finds_nodes_and_longest(tmp_path):
 
     with pytest.raises(InvalidPathError, match="not connected in sequence"):
         model.plot_profile.links(["P001", "P009"], show=False)
+
+    fig, ax = model.plot_profile.links(["P001", "P005"], show=False)
+    assert fig is ax.figure
+    assert any(line.get_label() == "Node locations" and line.get_linestyle() == ":" for line in ax.lines)
+    assert any(text.get_text() == "P001" for text in ax.texts)
+    assert any(text.get_text() == "P005" for text in ax.texts)
+    assert any(text.get_text() == "Distance (ft)" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
+    assert any(text.get_text() == "Elevation (ft)" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
+    assert ax.collections
+    _close(fig)
 
     fig, ax = model.plot_profile.nodes("P011", "Outlet", show=False)
     assert fig is ax.figure

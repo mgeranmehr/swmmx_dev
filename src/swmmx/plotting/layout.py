@@ -181,6 +181,36 @@ def _discrete_color_handles(encoded_style) -> list[Patch]:
     ]
 
 
+def _continuous_color_handles(encoded_style, *, max_samples: int = 5) -> list[Patch]:
+    """Return recursion-safe legend patches for one continuous color encoding."""
+
+    if encoded_style.mappable is None or not encoded_style.raw_values:
+        return []
+    try:
+        unique_values = sorted({float(value) for value in encoded_style.raw_values.values()})
+    except (TypeError, ValueError):
+        return []
+    if not unique_values:
+        return []
+    if len(unique_values) <= max_samples:
+        sample_values = unique_values
+    elif max_samples <= 1:
+        sample_values = [unique_values[0]]
+    else:
+        lower = unique_values[0]
+        upper = unique_values[-1]
+        step = (upper - lower) / (max_samples - 1)
+        sample_values = [lower + index * step for index in range(max_samples)]
+    return [
+        Patch(
+            facecolor=encoded_style.mappable.to_rgba(value),
+            edgecolor="none",
+            label=_format_legend_value(value),
+        )
+        for value in sample_values
+    ]
+
+
 def _data_style_requested(config) -> bool:
     """Return whether one nested style dictionary should explain itself."""
 
@@ -192,7 +222,7 @@ def _data_style_requested(config) -> bool:
 
 
 def _style_descriptor(layer: str, channel: str, config: Mapping) -> str:
-    """Build a concise title for one data-driven legend/colorbar section."""
+    """Build a concise title for one data-driven legend section."""
 
     explicit_title = config.get("legend_title")
     if explicit_title:
@@ -395,7 +425,9 @@ def plot_layout(
     legend, grid, title, legend_title, axis, x_axis_title, y_axis_title:
         Common presentation controls.  Layouts hide coordinate axes by default
         and show a legend by default.  ``grid=True`` keeps a visible reference
-        grid even when coordinate labels remain hidden.
+        grid even when coordinate labels remain hidden.  Titles, grids, and
+        visible axes are drawn with safe ordinary artists instead of
+        Matplotlib's native title/tick/grid machinery.
     save_format, save_path:
         Optional save controls.  If only ``save_format`` is supplied, the file
         is written beside the model path when available, otherwise in the
@@ -416,8 +448,8 @@ def plot_layout(
         by default, dashed subcatchment outlet connectors are drawn when
         outlet geometry is available, and LID usages are shown at their
         subcatchment centroids when present.  Data-driven color, size, and
-        width styles add dedicated legend sections or labeled colorbars when
-        their nested ``legend`` option is enabled.
+        width styles add dedicated legend sections when their nested
+        ``legend`` option is enabled.
 
     Examples
     --------
@@ -522,7 +554,7 @@ def plot_layout(
         if _data_style_requested(sub_config.get("color")):
             color_title = _style_descriptor("subcatchments", "color", sub_config["color"])
             if sub_colors.mappable is not None:
-                fig.colorbar(sub_colors.mappable, ax=ax, label=color_title)
+                style_legend_sections.append((color_title, _continuous_color_handles(sub_colors)))
             else:
                 style_legend_sections.append((color_title, _discrete_color_handles(sub_colors)))
 
@@ -614,7 +646,7 @@ def plot_layout(
         if _data_style_requested(link_config.get("color")):
             color_title = _style_descriptor("links", "color", link_config["color"])
             if link_colors.mappable is not None:
-                fig.colorbar(link_colors.mappable, ax=ax, label=color_title)
+                style_legend_sections.append((color_title, _continuous_color_handles(link_colors)))
             else:
                 style_legend_sections.append((color_title, _discrete_color_handles(link_colors)))
         if _data_style_requested(link_config.get("width")):
@@ -681,7 +713,7 @@ def plot_layout(
         if _data_style_requested(node_config.get("color")):
             color_title = _style_descriptor("nodes", "color", node_config["color"])
             if node_colors.mappable is not None:
-                fig.colorbar(node_colors.mappable, ax=ax, label=color_title)
+                style_legend_sections.append((color_title, _continuous_color_handles(node_colors)))
             else:
                 style_legend_sections.append((color_title, _discrete_color_handles(node_colors)))
         if _data_style_requested(node_config.get("size")):
@@ -767,6 +799,8 @@ def plot_layout(
                 zorder=label_config.get("zorder", 5),
             )
 
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.apply_aspect()
     apply_axes_options(
         ax,
         grid=grid,
@@ -774,8 +808,8 @@ def plot_layout(
         title=title,
         x_axis_title=x_axis_title or ("X Coordinate" if axis else None),
         y_axis_title=y_axis_title or ("Y Coordinate" if axis else None),
+        safe_layout_axes=True,
     )
-    ax.set_aspect("equal", adjustable="datalim")
     if legend and style_legend_sections:
         # One compact legend section per custom visual channel makes the
         # encoding self-describing: the symbol legend says "what objects are

@@ -17,7 +17,8 @@ from ..errors import (
     PlotDataError,
     UnknownIDError,
 )
-from .utils import apply_axes_options, create_axes, finalize_plot
+from ..validation import FLOW_UNITS_SI, FLOW_UNITS_US
+from .utils import add_safe_line_legend, apply_axes_options, create_axes, finalize_plot
 
 if TYPE_CHECKING:
     from ..api import SWMMModel
@@ -62,8 +63,8 @@ class PlotProfileAccessor:
         x_axis_title, y_axis_title, save_format, save_path, figsize, dpi, ax,
         show, unit_length, unit_elevation, show_ground, show_conduits,
         show_invert, show_crown, show_hgl, show_egl, show_water_depth,
-        show_node_labels, show_link_labels, show_surcharge, show_flooding,
-        fill_conduits, line_styles, colors:
+        show_node_labels, show_link_labels, show_node_guides, show_surcharge,
+        show_flooding, fill_conduits, line_styles, colors:
             Shared profile controls; result overlays require a completed run.
 
         Examples
@@ -93,13 +94,14 @@ class PlotProfileAccessor:
         ----------
         ids:
             Ordered link ID string or list of link ID strings.  Adjacent links
-            must connect in sequence.
+            must connect in sequence; the supplied walk may follow or oppose
+            hydraulic direction.
         time_step, aggregation, legend, grid, title, legend_title, axis,
         x_axis_title, y_axis_title, save_format, save_path, figsize, dpi, ax,
         show, unit_length, unit_elevation, show_ground, show_conduits,
         show_invert, show_crown, show_hgl, show_egl, show_water_depth,
-        show_node_labels, show_link_labels, show_surcharge, show_flooding,
-        fill_conduits, line_styles, colors:
+        show_node_labels, show_link_labels, show_node_guides, show_surcharge,
+        show_flooding, fill_conduits, line_styles, colors:
             Shared profile controls.  Geometry is plotted by default; result
             overlays require a completed run.
 
@@ -132,8 +134,8 @@ class PlotProfileAccessor:
         x_axis_title, y_axis_title, save_format, save_path, figsize, dpi, ax,
         show, unit_length, unit_elevation, show_ground, show_conduits,
         show_invert, show_crown, show_hgl, show_egl, show_water_depth,
-        show_node_labels, show_link_labels, show_surcharge, show_flooding,
-        fill_conduits, line_styles, colors:
+        show_node_labels, show_link_labels, show_node_guides, show_surcharge,
+        show_flooding, fill_conduits, line_styles, colors:
             Shared profile controls.  Geometry is plotted by default; result
             overlays require a completed run.
 
@@ -242,8 +244,8 @@ def _find_longest_path(model: "SWMMModel") -> list[str]:
     return [graph.edges[first, second]["id"] for first, second in zip(node_path, node_path[1:])]
 
 
-def _links_to_ordered_nodes(model: "SWMMModel", link_ids: list[str]) -> list[str]:
-    """Validate ordered links and return their connected node sequence."""
+def _ordered_link_path(model: "SWMMModel", link_ids: list[str]) -> list[tuple[str, str, str, bool]]:
+    """Return one connected link walk, orienting each link along the supplied sequence."""
 
     records = _link_records(model)
     unknown = [link_id for link_id in link_ids if link_id not in records]
@@ -252,12 +254,33 @@ def _links_to_ordered_nodes(model: "SWMMModel", link_ids: list[str]) -> list[str
     if not link_ids:
         raise InvalidPathError("At least one link ID is required for a profile path.")
 
-    nodes = [str(records[link_ids[0]]["from_node"]), str(records[link_ids[0]]["to_node"])]
-    for previous, current in zip(link_ids, link_ids[1:]):
-        if records[previous]["to_node"] != records[current]["from_node"]:
-            raise InvalidPathError(f"Links {link_ids!r} are not connected in sequence.")
-        nodes.append(str(records[current]["to_node"]))
-    return nodes
+    first = records[link_ids[0]]
+    candidates = [
+        [(link_ids[0], str(first["from_node"]), str(first["to_node"]), False)],
+        [(link_ids[0], str(first["to_node"]), str(first["from_node"]), True)],
+    ]
+    for candidate in candidates:
+        for link_id in link_ids[1:]:
+            current_tail = candidate[-1][2]
+            record = records[link_id]
+            from_node = str(record["from_node"])
+            to_node = str(record["to_node"])
+            if from_node == current_tail:
+                candidate.append((link_id, from_node, to_node, False))
+            elif to_node == current_tail:
+                candidate.append((link_id, to_node, from_node, True))
+            else:
+                break
+        else:
+            return candidate
+    raise InvalidPathError(f"Links {link_ids!r} are not connected in sequence.")
+
+
+def _links_to_ordered_nodes(model: "SWMMModel", link_ids: list[str]) -> list[str]:
+    """Validate ordered links and return their connected node sequence."""
+
+    path = _ordered_link_path(model, link_ids)
+    return [path[0][1], *[end_node for _link_id, _start_node, end_node, _reversed in path]]
 
 
 def _node_ground_elevation(model: "SWMMModel", node_id: str, invert: float) -> float:
@@ -277,7 +300,8 @@ def _compute_profile_geometry(model: "SWMMModel", link_ids: list[str]) -> Profil
     """Compute cumulative distances, inverts, crowns, and ground elevations."""
 
     records = _link_records(model)
-    nodes = _links_to_ordered_nodes(model, link_ids)
+    ordered_path = _ordered_link_path(model, link_ids)
+    nodes = [ordered_path[0][1], *[end_node for _link_id, _start_node, end_node, _reversed in ordered_path]]
     distances = [0.0]
     for link_id in link_ids:
         distances.append(distances[-1] + float(records[link_id]["length"]))
@@ -291,10 +315,12 @@ def _compute_profile_geometry(model: "SWMMModel", link_ids: list[str]) -> Profil
     downstream_inverts: list[float] = []
     crowns_upstream: list[float] = []
     crowns_downstream: list[float] = []
-    for index, link_id in enumerate(link_ids):
+    for index, (link_id, _start_node, _end_node, reversed_path) in enumerate(ordered_path):
         record = records[link_id]
-        upstream = node_inverts[index] + float(record["inlet_offset"])
-        downstream = node_inverts[index + 1] + float(record["outlet_offset"])
+        start_offset = float(record["outlet_offset"]) if reversed_path else float(record["inlet_offset"])
+        end_offset = float(record["inlet_offset"]) if reversed_path else float(record["outlet_offset"])
+        upstream = node_inverts[index] + start_offset
+        downstream = node_inverts[index + 1] + end_offset
         depth = float(record["full_depth"])
         if np.isnan(depth):
             raise PlotDataError(f"Cannot plot profile for link '{link_id}' because full depth is unavailable.")
@@ -337,6 +363,17 @@ def _selected_node_result(model: "SWMMModel", variable: str, nodes: list[str], *
         raise PlotDataError(f"Requested profile time_step '{time_step}' is not available.") from exc
 
 
+def _model_linear_unit(model: "SWMMModel") -> str | None:
+    """Infer the model's linear unit from its SWMM flow-unit family."""
+
+    flow_units = str(model._document.get_option("FLOW_UNITS") or "").upper()
+    if flow_units in FLOW_UNITS_SI:
+        return "m"
+    if flow_units in FLOW_UNITS_US:
+        return "ft"
+    return None
+
+
 def _plot_profile(
     model: "SWMMModel",
     link_ids: list[str],
@@ -366,10 +403,11 @@ def _plot_profile(
     show_egl: bool = False,
     show_water_depth: bool = False,
     show_node_labels: bool = True,
-    show_link_labels: bool = False,
+    show_link_labels: bool = True,
+    show_node_guides: bool = True,
     show_surcharge: bool = True,
     show_flooding: bool = True,
-    fill_conduits: bool = False,
+    fill_conduits: bool = True,
     line_styles: dict[str, str] | None = None,
     colors: dict[str, str] | None = None,
 ):
@@ -478,6 +516,21 @@ def _plot_profile(
     elif show_egl:
         warnings.warn("EGL is not yet available from swmmx result access and was skipped.", stacklevel=2)
 
+    if show_node_guides:
+        guide_y_min, guide_y_max = ax.get_ylim()
+        for index, distance in enumerate(geometry.distances):
+            ax.plot(
+                [distance, distance],
+                [guide_y_min, guide_y_max],
+                linestyle=":",
+                color="0.55",
+                linewidth=0.8,
+                alpha=0.8,
+                zorder=0,
+                label="Node locations" if index == 0 else "_nolegend_",
+            )
+        ax.set_ylim(guide_y_min, guide_y_max)
+
     if show_node_labels:
         for distance, elevation, node_id in zip(geometry.distances, geometry.node_grounds, geometry.nodes):
             ax.text(distance, elevation, node_id, fontsize=8, ha="center", va="bottom")
@@ -485,13 +538,23 @@ def _plot_profile(
         for index, link_id in enumerate(geometry.links):
             midpoint = float(np.mean(geometry.distances[index : index + 2]))
             midpoint_elevation = float(
-                np.mean([geometry.conduit_crowns_upstream[index], geometry.conduit_crowns_downstream[index]])
+                np.mean(
+                    [
+                        geometry.conduit_inverts_upstream[index],
+                        geometry.conduit_inverts_downstream[index],
+                        geometry.conduit_crowns_upstream[index],
+                        geometry.conduit_crowns_downstream[index],
+                    ]
+                )
             )
-            ax.text(midpoint, midpoint_elevation, link_id, fontsize=8, ha="center", va="bottom")
+            ax.text(midpoint, midpoint_elevation, link_id, fontsize=8, ha="center", va="center")
 
     generated_title = title or "SWMM Hydraulic Profile"
-    generated_x = x_axis_title or f"Distance{f' ({unit_length})' if unit_length else ''}"
-    generated_y = y_axis_title or f"Elevation{f' ({unit_elevation})' if unit_elevation else ''}"
+    inferred_linear_unit = _model_linear_unit(model)
+    resolved_length_unit = unit_length if unit_length is not None else inferred_linear_unit
+    resolved_elevation_unit = unit_elevation if unit_elevation is not None else inferred_linear_unit
+    generated_x = x_axis_title or f"Distance{f' ({resolved_length_unit})' if resolved_length_unit else ''}"
+    generated_y = y_axis_title or f"Elevation{f' ({resolved_elevation_unit})' if resolved_elevation_unit else ''}"
     apply_axes_options(
         ax,
         grid=grid,
@@ -499,9 +562,10 @@ def _plot_profile(
         title=generated_title,
         x_axis_title=generated_x,
         y_axis_title=generated_y,
+        safe_cartesian_axes=True,
     )
     if legend:
-        ax.legend(title=legend_title)
+        add_safe_line_legend(ax, title=legend_title)
     finalize_plot(
         fig,
         model,

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import struct
+import time
 
 import numpy as np
 
@@ -32,6 +33,14 @@ class OutputSummary:
         # SWMM writes six little-endian 32-bit integers at the end of the file.
         values = struct.unpack("<6i", data[-24:])
         return cls(*values)
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "OutputSummary":
+        """Read the fixed six-integer trailer from an in-memory output payload."""
+
+        if len(data) < 24:
+            raise ValueError("Output payload is too small to contain a SWMM trailer.")
+        return cls(*struct.unpack("<6i", data[-24:]))
 
 
 @dataclass(frozen=True)
@@ -98,14 +107,55 @@ class OutputFile:
         """Read and validate the immutable binary file payload."""
 
         self.path = Path(path)
-        self._data = self.path.read_bytes()
-        if len(self._data) < 52:
-            raise ValueError(f"Output file '{self.path}' is too small to be a SWMM output file.")
+        self._data, self.header, self.summary = self._read_stable_payload(self.path)
 
-        # The first seven little-endian integers contain the counts needed to
-        # walk each period record without interpreting the richer input block.
-        self.header = OutputHeader(*struct.unpack("<7i", self._data[:28]))
-        self.summary = OutputSummary.from_file(self.path)
+    @staticmethod
+    def _read_stable_payload(path: Path, *, attempts: int = 3, delay_seconds: float = 0.01):
+        """Read one complete SWMM output payload, retrying brief write races."""
+
+        last_error: Exception | None = None
+        for attempt in range(attempts):
+            data = path.read_bytes()
+            try:
+                if len(data) < 52:
+                    raise ValueError(f"Output file '{path}' is too small to be a SWMM output file.")
+                header = OutputHeader(*struct.unpack("<7i", data[:28]))
+                summary = OutputSummary.from_bytes(data)
+                OutputFile._validate_payload(path, data, header, summary)
+                return data, header, summary
+            except ValueError as exc:
+                last_error = exc
+                if attempt + 1 < attempts:
+                    time.sleep(delay_seconds)
+        raise ValueError(f"Output file '{path}' is not a complete SWMM output file.") from last_error
+
+    @staticmethod
+    def _validate_payload(path: Path, data: bytes, header: OutputHeader, summary: OutputSummary) -> None:
+        """Reject inconsistent headers before callers allocate result arrays."""
+
+        counts = (header.subcatchments, header.nodes, header.links, header.pollutants, summary.periods)
+        if any(value < 0 for value in counts):
+            raise ValueError(f"Output file '{path}' contains negative SWMM result counts.")
+        if header.magic_number != summary.magic_number:
+            raise ValueError(f"Output file '{path}' has mismatched SWMM magic numbers.")
+
+        subcatchment_result_count = 8 + header.pollutants
+        node_result_count = 6 + header.pollutants
+        link_result_count = 5 + header.pollutants
+        period_float_count = (
+            header.subcatchments * subcatchment_result_count
+            + header.nodes * node_result_count
+            + header.links * link_result_count
+            + 15
+        )
+        period_size = 8 + 4 * period_float_count
+        expected_record_end = summary.output_start_position + summary.periods * period_size
+        if (
+            summary.output_start_position < 0
+            or summary.output_start_position > len(data)
+            or expected_record_end != len(data) - 24
+        ):
+            raise ValueError(f"Output file '{path}' has inconsistent SWMM period geometry.")
 
     @property
     def subcatchment_result_count(self) -> int:

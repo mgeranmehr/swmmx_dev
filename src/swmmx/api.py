@@ -40,7 +40,7 @@ from .parameters import (
     normalize_values,
 )
 from .plotting import PlotProfileAccessor, PlotTimeseriesRoot, plot_layout as render_layout
-from .results import OutputFile, OutputSummary
+from .results import OutputFile
 from .schema import SchemaRegistry
 from .time import TimeAccessor, build_timestamps, parse_duration
 from .validation import FLOW_UNITS_SI, FLOW_UNITS_US, validate_document
@@ -1707,11 +1707,11 @@ class SWMMModel:
 
         periods = 0
         if out_path.exists():
-            summary = OutputSummary.from_file(out_path)
-            periods = summary.periods
+            output_file = OutputFile(out_path)
+            periods = output_file.summary.periods
             self._run_timestamps = self._run_timestamps_from_periods(periods)
             self._last_output_path = out_path
-            self._output_file_cache = None
+            self._output_file_cache = output_file
             self._results_stale = False
         else:
             self._run_timestamps = None
@@ -1758,12 +1758,12 @@ class SWMMModel:
         periods = 0
         error_code = 0
         if out_path.exists():
-            summary = OutputSummary.from_file(out_path)
-            periods = summary.periods
-            error_code = summary.error_code
+            output_file = OutputFile(out_path)
+            periods = output_file.summary.periods
+            error_code = output_file.summary.error_code
             self._run_timestamps = self._run_timestamps_from_periods(periods)
             self._last_output_path = out_path
-            self._output_file_cache = None
+            self._output_file_cache = output_file
             self._results_stale = False
         else:
             self._run_timestamps = None
@@ -1860,6 +1860,8 @@ class SWMMModel:
             Common presentation controls.  Coordinate axes are hidden by
             default; legends are shown by default.  ``grid=True`` keeps a
             visible reference grid even when coordinate labels remain hidden.
+            Layout titles, grids, and visible axes use safe ordinary artists
+            rather than Matplotlib's native title/tick/grid machinery.
         save_format, save_path:
             Optional figure-saving controls.  Supplying only ``save_format``
             writes ``swmm_layout.<format>`` beside the model path when possible.
@@ -1877,8 +1879,7 @@ class SWMMModel:
             symbology is type-aware by default, subcatchment outlet connectors
             are drawn as dashed lines, and LID usage markers are added when
             present.  Data-driven color, size, and width styles add dedicated
-            legend sections or labeled colorbars when their nested ``legend``
-            option is enabled.
+            legend sections when their nested ``legend`` option is enabled.
 
         Examples
         --------

@@ -7,6 +7,7 @@ import inspect
 from typing import TYPE_CHECKING
 import warnings
 
+import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 
@@ -19,7 +20,7 @@ from ..errors import (
     UnknownParameterError,
 )
 from ..parameters import api_name
-from .utils import apply_axes_options, create_axes, finalize_plot
+from .utils import add_safe_line_legend, apply_axes_options, create_axes, finalize_plot
 
 if TYPE_CHECKING:
     from ..api import SWMMModel
@@ -142,8 +143,7 @@ class PlotTimeseriesCallable:
             inspect.Parameter("dpi", inspect.Parameter.KEYWORD_ONLY, default=300),
             inspect.Parameter("ax", inspect.Parameter.KEYWORD_ONLY, default=None),
             inspect.Parameter("show", inspect.Parameter.KEYWORD_ONLY, default=True),
-            inspect.Parameter("unit", inspect.Parameter.KEYWORD_ONLY, default=None),
-            inspect.Parameter("time_format", inspect.Parameter.KEYWORD_ONLY, default="timestamp"),
+            inspect.Parameter("time_format", inspect.Parameter.KEYWORD_ONLY, default="datetime"),
             inspect.Parameter("start_time", inspect.Parameter.KEYWORD_ONLY, default=None),
             inspect.Parameter("end_time", inspect.Parameter.KEYWORD_ONLY, default=None),
             inspect.Parameter("labels", inspect.Parameter.KEYWORD_ONLY, default=None),
@@ -151,7 +151,6 @@ class PlotTimeseriesCallable:
             inspect.Parameter("linestyle", inspect.Parameter.KEYWORD_ONLY, default="-"),
             inspect.Parameter("marker", inspect.Parameter.KEYWORD_ONLY, default=None),
             inspect.Parameter("alpha", inspect.Parameter.KEYWORD_ONLY, default=1.0),
-            inspect.Parameter("max_series", inspect.Parameter.KEYWORD_ONLY, default=None),
         ]
     )
 
@@ -174,7 +173,7 @@ class PlotTimeseriesCallable:
             "save_format, save_path:\n"
             "    Optional save controls.  With only ``save_format``, files are named\n"
             f"    ``swmm_timeseries_{category}_{variable}.<format>``.\n"
-            "unit, time_format, start_time, end_time, labels, linewidth, linestyle, marker, alpha, max_series:\n"
+            "time_format, start_time, end_time, labels, linewidth, linestyle, marker, alpha:\n"
             "    Series filtering and line styling controls.\n\n"
             "Examples\n"
             "--------\n"
@@ -185,7 +184,10 @@ class PlotTimeseriesCallable:
             "    ``(fig, ax)`` for the matplotlib figure and axes.\n\n"
             "Notes\n"
             "-----\n"
-            "Result variables require ``m.run()`` first.  Timestamp indexes are used by default."
+            "Result variables require ``m.run()`` first.  ``time_format`` accepts ``'datetime'``, "
+            "``'clock'``, or ``'elapsed'``; full date-time labels are used by default. "
+            "Titles, grids, ticks, and labels use safe ordinary artists; legends use lightweight proxy lines, "
+            "so Matplotlib does not need to draw native Axis artists or clone plotted artists."
         )
 
     def __call__(self, ids=None, **kwargs):
@@ -297,8 +299,7 @@ def plot_timeseries(
     dpi: int = 300,
     ax=None,
     show: bool = True,
-    unit: str | None = None,
-    time_format: str = "timestamp",
+    time_format: str = "datetime",
     start_time=None,
     end_time=None,
     labels=None,
@@ -306,30 +307,31 @@ def plot_timeseries(
     linestyle: str = "-",
     marker=None,
     alpha: float = 1.0,
-    max_series: int | None = None,
 ):
     """Plot one routed result variable as one or more matplotlib time series."""
 
     frame = _system_frame(model, variable) if category == "system" else _result_frame(model, category, variable, spec, ids)
     frame = _apply_time_filter(frame, start_time=start_time, end_time=end_time)
 
-    if max_series is not None and len(frame.columns) > max_series:
-        raise PlotDataError(
-            f"Requested {len(frame.columns)} series, which exceeds max_series={max_series}."
-        )
     if ids is None and len(frame.columns) > 20:
         warnings.warn(
-            f"Plotting {len(frame.columns)} series; consider passing ids=... or max_series=... for readability.",
+            f"Plotting {len(frame.columns)} series; consider passing ids=... for readability.",
             stacklevel=2,
         )
 
     fig, ax = create_axes(figsize=figsize, dpi=dpi, ax=ax)
-    if time_format == "timestamp":
+    if time_format == "datetime":
         x_values = frame.index
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M"))
+    elif time_format == "clock":
+        x_values = frame.index
+        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
     elif time_format == "elapsed":
         x_values = (frame.index - frame.index[0]).total_seconds() / 3600.0
     else:
-        raise PlotDataError("'time_format' must be 'timestamp' or 'elapsed'.")
+        raise PlotDataError("'time_format' must be 'datetime', 'clock', or 'elapsed'.")
 
     for index, column in enumerate(frame.columns):
         ax.plot(
@@ -343,8 +345,12 @@ def plot_timeseries(
         )
 
     generated_title = title or f"{category.replace('_', ' ').title()} {variable.replace('_', ' ').title()}"
-    generated_y_label = y_axis_title or f"{variable.replace('_', ' ').title()}{f' ({unit})' if unit else ''}"
-    generated_x_label = x_axis_title or ("Time" if time_format == "timestamp" else "Elapsed Time (hours)")
+    generated_y_label = y_axis_title or f"{variable.replace('_', ' ').title()}"
+    generated_x_label = x_axis_title or {
+        "datetime": "Date and Time",
+        "clock": "Time",
+        "elapsed": "Elapsed Time (hours)",
+    }[time_format]
     apply_axes_options(
         ax,
         grid=grid,
@@ -352,9 +358,10 @@ def plot_timeseries(
         title=generated_title,
         x_axis_title=generated_x_label,
         y_axis_title=generated_y_label,
+        safe_cartesian_axes=True,
     )
     if legend and len(frame.columns) > 0:
-        ax.legend(title=legend_title)
+        add_safe_line_legend(ax, title=legend_title)
 
     finalize_plot(
         fig,
