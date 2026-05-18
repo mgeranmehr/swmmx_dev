@@ -25,6 +25,12 @@ LAYER_DEFAULTS: dict[str, dict[str, Any]] = {
         "color": "black",
         "edge_color": "white",
         "marker": "o",
+        "type_markers": {
+            "junction": "o",
+            "outfall": "v",
+            "divider": "D",
+            "storage_unit": "s",
+        },
         "linewidth": 0.5,
         "alpha": 1.0,
         "label": "Nodes",
@@ -34,6 +40,13 @@ LAYER_DEFAULTS: dict[str, dict[str, Any]] = {
         "width": 1.5,
         "color": "gray",
         "linestyle": "-",
+        "type_linestyles": {
+            "conduit": "-",
+            "pump": "-.",
+            "orifice": ":",
+            "weir": "--",
+            "outlet": (0, (5, 1)),
+        },
         "alpha": 1.0,
         "label": "Links",
     },
@@ -45,6 +58,14 @@ LAYER_DEFAULTS: dict[str, dict[str, Any]] = {
         "alpha": 0.25,
         "label": "Subcatchments",
     },
+    "subcatchment_outlets": {
+        "visible": True,
+        "width": 1.0,
+        "color": "0.45",
+        "linestyle": "--",
+        "alpha": 0.8,
+        "label": "Subcatchment outlets",
+    },
     "rain_gages": {
         "visible": True,
         "size": 45,
@@ -52,6 +73,16 @@ LAYER_DEFAULTS: dict[str, dict[str, Any]] = {
         "marker": "^",
         "alpha": 1.0,
         "label": "Rain gages",
+    },
+    "lids": {
+        "visible": True,
+        "size": 55,
+        "color": "tab:purple",
+        "edge_color": "white",
+        "linewidth": 0.5,
+        "alpha": 1.0,
+        "label": "LID controls",
+        "markers": ["P", "X", "*", "h", "8", "d"],
     },
     "labels": {
         "visible": False,
@@ -76,6 +107,9 @@ class EncodedStyle:
     mappable: Any | None = None
     legend_title: str | None = None
     discrete_labels: dict[Any, str] | None = None
+    discrete_colors: dict[Any, Any] | None = None
+    raw_values: dict[str, Any] | None = None
+    source: str | None = None
 
 
 def normalize_layer_config(value, layer: str) -> dict[str, Any]:
@@ -95,7 +129,9 @@ def normalize_layout_configs(
     nodes,
     links,
     subcatchments,
+    subcatchment_outlets,
     rain_gages,
+    lids,
     labels,
     link_color_by=None,
     link_color_mode=None,
@@ -110,9 +146,16 @@ def normalize_layout_configs(
         "nodes": normalize_layer_config(nodes, "nodes"),
         "links": normalize_layer_config(links, "links"),
         "subcatchments": normalize_layer_config(subcatchments, "subcatchments"),
+        "subcatchment_outlets": normalize_layer_config(subcatchment_outlets, "subcatchment_outlets"),
         "rain_gages": normalize_layer_config(rain_gages, "rain_gages"),
+        "lids": normalize_layer_config(lids, "lids"),
         "labels": normalize_layer_config(labels, "labels"),
     }
+
+    # Accept the more generic user-facing "size" spelling for link widths
+    # while keeping "width" as the canonical matplotlib line parameter.
+    if isinstance(links, Mapping) and "size" in links and "width" not in links:
+        configs["links"]["width"] = links["size"]
 
     # The aliases intentionally compile down into the same dictionary grammar as
     # the rich API, so the main renderer only has one path to reason about.
@@ -269,6 +312,7 @@ def encode_color(
         return EncodedStyle(values={object_id: config.get("value") for object_id in ids})
 
     raw_values = resolve_data_values(model, layer, ids, config)
+    source = str(config.get("by", "static")).lower()
     mode = str(config.get("mode", "continuous")).lower()
     cmap = matplotlib.colormaps.get_cmap(str(config.get("cmap", "viridis")))
     if mode == "continuous":
@@ -284,6 +328,8 @@ def encode_color(
             values={object_id: scalar_mappable.to_rgba(raw_values[object_id]) for object_id in ids},
             mappable=scalar_mappable,
             legend_title=config.get("legend_title"),
+            raw_values=raw_values,
+            source=source,
         )
     if mode == "discrete":
         categories = list(dict.fromkeys(raw_values[object_id] for object_id in ids))
@@ -301,6 +347,9 @@ def encode_color(
             values={object_id: color_by_category[raw_values[object_id]] for object_id in ids},
             legend_title=config.get("legend_title"),
             discrete_labels=discrete_labels,
+            discrete_colors=color_by_category,
+            raw_values=raw_values,
+            source=source,
         )
     raise PlotDataError("Color style 'mode' must be 'continuous' or 'discrete'.")
 
@@ -325,6 +374,7 @@ def encode_size(
         return EncodedStyle(values={object_id: config.get("value") for object_id in ids})
 
     raw_values = resolve_data_values(model, layer, ids, config)
+    source = str(config.get("by", "static")).lower()
     numeric = _numeric_array(raw_values, ids)
     lower = float(config.get(min_key, default_min))
     upper = float(config.get(max_key, default_max))
@@ -334,4 +384,9 @@ def encode_size(
         scaled = np.full_like(numeric, (lower + upper) / 2.0, dtype=float)
     else:
         scaled = lower + (numeric - numeric.min()) * (upper - lower) / (numeric.max() - numeric.min())
-    return EncodedStyle(values=dict(zip(ids, scaled.tolist())), legend_title=config.get("legend_title"))
+    return EncodedStyle(
+        values=dict(zip(ids, scaled.tolist())),
+        legend_title=config.get("legend_title"),
+        raw_values=raw_values,
+        source=source,
+    )

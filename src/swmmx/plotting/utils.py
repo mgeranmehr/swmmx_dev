@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+import warnings
 
 import matplotlib.pyplot as plt
 
@@ -52,18 +53,35 @@ def apply_axes_options(
 
     ensure_bool("grid", grid)
     ensure_bool("axis", axis)
-    ax.grid(grid)
     if title:
         ax.set_title(title)
     if axis:
         ax.set_axis_on()
+        ax.grid(grid)
         if x_axis_title is not None:
             ax.set_xlabel(x_axis_title)
         if y_axis_title is not None:
             ax.set_ylabel(y_axis_title)
+    elif grid:
+        # ``axis=False`` means "hide coordinate furniture", not "discard a
+        # requested reference grid".  Keep the axes technically on so the grid
+        # can render, then remove ticks, labels, and spines from view.
+        ax.set_axis_on()
+        ax.grid(True)
+        ax.tick_params(
+            axis="both",
+            which="both",
+            bottom=False,
+            left=False,
+            labelbottom=False,
+            labelleft=False,
+        )
+        for spine in ax.spines.values():
+            spine.set_visible(False)
     else:
         # ``set_axis_off`` hides ticks, spines, and labels while leaving artists
         # intact; this is the clean default for map-style layouts.
+        ax.grid(False)
         ax.set_axis_off()
 
 
@@ -151,6 +169,7 @@ def finalize_plot(
     default_stem: str,
     dpi: int,
     show: bool,
+    close_if_hidden: bool = False,
 ) -> None:
     """Apply shared save/show behavior after plot artists are assembled."""
 
@@ -163,6 +182,26 @@ def finalize_plot(
         default_stem=default_stem,
         dpi=dpi,
     )
-    if show:
-        plt.show()
+    backend_name = fig.canvas.__class__.__name__.lower()
+    canvas_supports_gui_show = "agg" not in backend_name or "nbagg" in backend_name or "webagg" in backend_name
+    if show and canvas_supports_gui_show:
+        # Prefer the concrete figure over pyplot's global manager.  Some rich
+        # interactive backends can recurse while copying pyplot manager state;
+        # the plot itself is already complete, so a backend show failure should
+        # not make the plotting API unusable.
+        try:
+            fig.show()
+        except RecursionError:
+            warnings.warn(
+                "The active matplotlib backend raised a recursion error while displaying the figure. "
+                "The figure was created successfully and is still returned; use show=False or display it manually.",
+                stacklevel=2,
+            )
+    elif close_if_hidden:
+        # Inline notebook backends can display any still-open figure at the end
+        # of a cell even when the library never calls ``show``.  Removing the
+        # figure from pyplot's manager keeps ``show=False`` honest while the
+        # returned Figure/Axes objects remain fully usable by the caller.
+        import matplotlib.pyplot as plt
 
+        plt.close(fig)

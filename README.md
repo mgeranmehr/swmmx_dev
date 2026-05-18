@@ -8,6 +8,8 @@
 [![Build](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml/badge.svg)](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml)
 [![Downloads](https://img.shields.io/pypi/dm/swmmx.svg)](https://pypi.org/project/swmmx/)
 
+> **Development notice:** `swmmx` is under active testing and development. Issues are being identified and corrected continuously, so please make sure you are using the latest available release before reporting unexpected behavior.
+
 `swmmx` A Python Toolkit for Building, Editing, Running, Visualizing, and Exporting EPA SWMM Models:
 
 ```python
@@ -19,7 +21,7 @@ result = m.run()
 print(m.time.count_run())
 ```
 
-Version `0.0.20` currently provides:
+Version `0.0.26` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -243,13 +245,15 @@ m.plot_profile.nodes(
 )
 ```
 
-`m.plot_layout()` draws mapped subcatchments, links, nodes, and rain gages from the model coordinates. Layer dictionaries support ordinary static styling as well as data-driven styling from fixed input parameters, simulation results, or your own ID-to-value mappings. Result-driven styles require a completed run; user-data styles are useful for classes such as risk bands, inspection status, or scenario groups.
+`m.plot_layout()` draws mapped subcatchments, links, nodes, rain gages, and LID usages from the model coordinates. Subcatchments show dashed outlet connectors from each polygon centroid to its outlet node or downstream subcatchment. The default symbology is type-aware: node types use different markers, link types use different line styles, and LID controls use distinct markers in the legend when present. Presentation controls are explicit: `title=...` sets the map title, `axis=True` shows coordinate axes, `grid=True` keeps a visible reference grid even when coordinate labels stay hidden, and `show=False` suppresses automatic figure display while still returning `(fig, ax)`. On non-interactive matplotlib canvases such as Agg, `show=True` avoids useless GUI calls but keeps the figure available for Spyder/Jupyter rendering; `show=False` removes only the library-created figure manager so hidden plots stay hidden.
+
+Layer dictionaries support ordinary static styling as well as data-driven styling from fixed input parameters, simulation results, or your own ID-to-value mappings. Nodes, links, and subcatchments can be colored with continuous or discrete colormaps; nodes can use data-driven marker size, and links can use data-driven line width (or the `size` alias). Result-driven styles require a completed run; user-data styles are useful for classes such as risk bands, inspection status, or scenario groups. When color, size, or width is data-driven, the plot now adds a dedicated legend section or labeled colorbar so the encoded value is visible on the finished figure instead of living only in the function call.
 
 `m.plot_timeseries.<category>.<sub_category>()` routes through the result API and plots one or many timestamped series with matplotlib. `m.plot_profile.nodes()`, `.links()`, and `.longest()` build directed hydraulic paths and render geometry-first longitudinal profiles, with HGL/water overlays available after a run.
 
 All plotting calls return `(fig, ax)`, accept `ax=` for composition, and support `save_path=` / `save_format=`. Common errors are explicit: layout plots need coordinates, result-based plots need `m.run()`, invalid IDs raise `UnknownIDError`, and disconnected profile requests raise `NoPathError`.
 
-For a complete plotting reference, see [`examples/15_all_plot_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/15_all_plot_functions.ipynb). It documents every plotting endpoint, every input and default, all dynamic time-series variables, layout layer/style dictionaries, profile controls, outputs, save behavior, and common validation errors.
+For a complete plotting reference, see [`examples/15_all_plot_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/15_all_plot_functions.ipynb). It documents every plotting endpoint, every input and default, all dynamic time-series variables, runnable layer-dictionary examples for nodes/links/subcatchments/connectors/rain gages/LIDs/labels, custom-style legend behavior, profile controls, outputs, save behavior, and common validation errors.
 
 ## Export
 

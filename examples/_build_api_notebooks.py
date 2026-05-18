@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import inspect
 from pathlib import Path
+from textwrap import dedent
 from typing import Iterable
 
 from swmmx import swmm
@@ -815,12 +816,247 @@ def _plot_timeseries_catalog(model) -> str:
     )
 
 
+def _layout_layer_example_text() -> str:
+    """Return seven fully annotated `m.plot_layout()` layer examples."""
+
+    return dedent(
+        """
+        ### Seven fully annotated `m.plot_layout()` layer examples
+
+        These examples use IDs discovered from `examples/example.inp`, so they are safe to execute after the setup cell above.  
+        Result-driven examples require `m.run()` first; user-driven examples use dictionaries prepared in the setup cell.
+
+        #### 1. `nodes={...}`
+
+        ```python
+        m.plot_layout(
+            nodes={
+                'visible': True,             # True draws nodes; False hides the whole node layer.
+                'label': 'Nodes',             # Generic layer label used in the ordinary object legend.
+                'legend': True,               # Include node information in legends when True.
+                'alpha': 1.0,                 # Marker transparency from 0.0 (clear) to 1.0 (opaque).
+                'zorder': 3,                   # Drawing order; larger numbers appear above lower layers.
+                'size': {
+                    'by': 'user',             # Choose 'static', 'parameter', 'result', or 'user'.
+                    # 'value': 40,            # Static size, used only when by='static'.
+                    # 'category': 'node',     # Public getter category for parameter/result styling.
+                    # 'variable': 'depth',    # Public getter variable to encode.
+                    'data': node_size_data,   # ID -> value mapping, used only when by='user'.
+                    'mode': 'continuous',     # Reserved metadata for size encodings; numeric scaling is continuous.
+                    # 'bins': [0, 1, 2],      # Optional metadata for future/discrete presentation.
+                    # 'labels': ['low', 'high'],  # Optional presentation labels.
+                    # 'aggregation': 'max',   # Result reducer: last/max/min/mean/median/sum.
+                    # 'time_step': -1,        # Select one result row instead of aggregating.
+                    # 'time': '2026-01-01 01:00',  # Select one result timestamp instead of aggregating.
+                    'min_size': 20,            # Smallest rendered marker area.
+                    'max_size': 200,           # Largest rendered marker area.
+                    'legend': True,            # Add a dedicated custom-style legend section.
+                    'legend_title': 'Node size score',  # Custom legend section title.
+                },
+                'color': {
+                    'by': 'user',             # Here color is based on user-defined classes.
+                    # 'value': 'black',       # Static color, used only when by='static'.
+                    # 'category': 'node',     # Required for parameter/result styling.
+                    # 'variable': 'depth',    # Required for parameter/result styling.
+                    'data': node_class_data,  # ID -> value mapping, required when by='user'.
+                    'mode': 'discrete',        # 'continuous' for numeric ramps, 'discrete' for classes.
+                    'cmap': 'tab10',           # Any matplotlib colormap name.
+                    # 'bins': [0, 1, 2],      # Optional metadata for custom/discrete grouping.
+                    'labels': ['Junction', 'Outfall'],  # Display labels for discrete classes.
+                    # 'vmin': 0.0,            # Lower color bound for continuous color maps.
+                    # 'vmax': 2.0,            # Upper color bound for continuous color maps.
+                    # 'aggregation': 'max',   # Result reducer when by='result'.
+                    # 'time_step': -1,        # Single result row when by='result'.
+                    # 'time': '2026-01-01 01:00',  # Single result timestamp when by='result'.
+                    'legend': True,            # Add a dedicated color legend section.
+                    'legend_title': 'Node class',
+                },
+                'edge_color': 'white',         # Marker edge color.
+                'marker': 'o',                 # Fallback marker when no type-specific marker is supplied.
+                'type_markers': {              # Marker by SWMM node type.
+                    'junction': 'o',
+                    'outfall': 'v',
+                    'divider': 'D',
+                    'storage_unit': 's',
+                },
+                'linewidth': 0.5,              # Marker edge-line width.
+                'ids': selected_node_ids,       # Optional node subset; omit to draw all nodes.
+            },
+        )
+        ```
+
+        #### 2. `links={...}`
+
+        ```python
+        m.plot_layout(
+            links={
+                'visible': True,               # True draws links; False hides the whole link layer.
+                'label': 'Links',               # Generic layer label for the ordinary object legend.
+                'legend': True,                 # Include link information in legends when True.
+                'alpha': 1.0,                   # Line transparency.
+                'zorder': 2,                     # Draw links above polygons but below nodes.
+                'width': {
+                    'by': 'parameter',          # Width can come from static/parameter/result/user data.
+                    # 'value': 1.5,             # Static width when by='static'.
+                    'category': 'conduit',      # Getter category for the width source.
+                    'variable': 'roughness',    # Getter variable for the width source.
+                    # 'data': link_width_data,  # ID -> value mapping when by='user'.
+                    'mode': 'continuous',       # Numeric width scaling is continuous.
+                    # 'bins': [0.01, 0.02],     # Optional metadata.
+                    # 'labels': ['smooth', 'rough'],  # Optional presentation labels.
+                    # 'aggregation': 'max',      # Result reducer when by='result'.
+                    # 'time_step': -1,           # Single result row when by='result'.
+                    # 'time': '2026-01-01 01:00',  # Single result timestamp when by='result'.
+                    'min_width': 0.5,            # Smallest rendered line width.
+                    'max_width': 4.0,            # Largest rendered line width.
+                    'legend': True,              # Add a dedicated width legend section.
+                    'legend_title': 'Conduit roughness',
+                },
+                # 'size': {...},                # Alias for 'width'; use either 'width' or 'size'.
+                'color': {
+                    'by': 'user',               # Here color is based on your own link classes.
+                    # 'value': 'gray',          # Static color when by='static'.
+                    # 'category': 'link',       # Result getter category.
+                    # 'variable': 'flow',       # Result getter variable.
+                    'data': link_class_data,    # ID -> value mapping when by='user'.
+                    'mode': 'discrete',          # Discrete classes or continuous numeric values.
+                    'cmap': 'tab10',             # Matplotlib colormap.
+                    # 'bins': [0, 1, 2],        # Optional metadata.
+                    'labels': ['Main', 'Secondary'],  # Optional labels for discrete mode.
+                    # 'vmin': 0.0,              # Lower color-map limit for continuous mode.
+                    # 'vmax': 10.0,              # Optional upper color-map limit.
+                    # 'aggregation': 'max',      # Result reducer.
+                    # 'time_step': -1,           # Single result row instead of aggregation.
+                    # 'time': '2026-01-01 01:00',  # Single result timestamp instead of aggregation.
+                    'legend': True,              # Add a result colorbar/legend.
+                    'legend_title': 'Link class',
+                },
+                'linestyle': '-',               # Fallback line style.
+                'type_linestyles': {            # Line style by SWMM link type.
+                    'conduit': '-',
+                    'pump': '-.',
+                    'orifice': ':',
+                    'weir': '--',
+                    'outlet': (0, (5, 1)),
+                },
+                'ids': selected_link_ids,        # Optional link subset; omit to draw all links.
+            },
+        )
+        ```
+
+        #### 3. `subcatchments={...}`
+
+        ```python
+        m.plot_layout(
+            subcatchments={
+                'visible': True,                # Draw polygon areas when True.
+                'label': 'Subcatchments',        # Ordinary legend label.
+                'legend': True,                  # Include polygons in legends when True.
+                'alpha': 0.25,                   # Polygon fill transparency.
+                'zorder': 1,                      # Background layer below network geometry.
+                'color': {
+                    'by': 'parameter',           # Static/parameter/result/user are all supported.
+                    # 'value': 'lightgreen',     # Static fill color when by='static'.
+                    'category': 'subcatchment',  # Getter category for parameter/result styling.
+                    'variable': 'area',          # Getter variable to encode.
+                    # 'data': subcatchment_class_data,  # ID -> value mapping when by='user'.
+                    'mode': 'continuous',        # Continuous or discrete color mapping.
+                    'cmap': 'YlGn',               # Matplotlib colormap.
+                    # 'bins': [0, 1, 2],         # Optional metadata.
+                    # 'labels': ['small', 'large'],  # Optional labels for discrete mode.
+                    # 'vmin': 0.0,               # Optional lower color bound.
+                    # 'vmax': 10.0,              # Optional upper color bound.
+                    # 'aggregation': 'max',      # Result reducer when by='result'.
+                    # 'time_step': -1,           # Single result row when by='result'.
+                    # 'time': '2026-01-01 01:00',  # Single result timestamp when by='result'.
+                    'legend': True,              # Add a colorbar/legend for the fill encoding.
+                    'legend_title': 'Subcatchment area',
+                },
+                'edge_color': 'green',           # Polygon boundary color.
+                'linewidth': 1.0,                # Polygon boundary width.
+                'ids': selected_subcatchment_ids, # Optional polygon subset.
+            },
+        )
+        ```
+
+        #### 4. `subcatchment_outlets={...}`
+
+        ```python
+        m.plot_layout(
+            subcatchment_outlets={
+                'visible': True,                 # Draw centroid -> outlet connectors.
+                'label': 'Subcatchment outlets',  # Ordinary legend label.
+                'legend': True,                   # Include connector style in the legend.
+                'alpha': 0.8,                     # Connector transparency.
+                'zorder': 1.5,                    # Above polygons, below links.
+                'width': 1.0,                     # Connector line width.
+                'color': '0.45',                  # Any matplotlib color.
+                'linestyle': '--',                # Dashed drainage cue.
+                'ids': selected_subcatchment_ids, # Optional subcatchment subset.
+            },
+        )
+        ```
+
+        #### 5. `rain_gages={...}`
+
+        ```python
+        m.plot_layout(
+            rain_gages={
+                'visible': True,                  # Draw rain-gage symbols when True.
+                'label': 'Rain gages',             # Ordinary legend label.
+                'legend': True,                    # Include rain gages in the legend.
+                'alpha': 1.0,                      # Marker transparency.
+                'zorder': 4,                       # Above the hydraulic network.
+                'size': 45,                        # Marker area.
+                'color': 'tab:blue',               # Marker fill color.
+                'marker': '^',                     # Matplotlib marker shape.
+                'ids': selected_rain_gage_ids,     # Optional rain-gage subset.
+            },
+        )
+        ```
+
+        #### 6. `lids={...}`
+
+        ```python
+        m.plot_layout(
+            lids={
+                'visible': True,                   # Draw LID usage markers when usages exist.
+                'label': 'LID controls',            # Generic layer label; each control also gets its own legend item.
+                'legend': True,                     # Include LID markers in the legend.
+                'alpha': 1.0,                       # Marker transparency.
+                'zorder': 4.5,                      # Above nodes/rain gages when desired.
+                'size': 55,                         # Marker area.
+                'color': 'tab:purple',              # Marker fill color.
+                'edge_color': 'white',              # Marker edge color.
+                'linewidth': 0.5,                   # Marker edge width.
+                'markers': ['P', 'X', '*', 'h', '8', 'd'],  # Cycled across distinct LID control IDs.
+            },
+        )
+        ```
+
+        #### 7. `labels={...}`
+
+        ```python
+        m.plot_layout(
+            labels={
+                'visible': True,                    # Draw node-ID text labels when True.
+                'alpha': 1.0,                       # Text transparency.
+                'zorder': 5,                         # Text usually sits above all symbol layers.
+                'fontsize': 8,                       # Text size in points.
+                'color': 'black',                    # Text color.
+            },
+        )
+        ```
+        """
+    ).strip()
+
+
 def _plot_notebook(model) -> dict:
     """Build the complete plotting-reference notebook."""
 
     layout_options = [
         ["`legend`", "`bool`", "`True`", "Show ordinary layer legend entries."],
-        ["`grid`", "`bool`", "`False`", "Show grid lines when axes are visible."],
+        ["`grid`", "`bool`", "`False`", "Show reference grid lines; they remain visible even when coordinate labels stay hidden."],
         ["`title`", "`str | None`", "`None`", "Optional plot title."],
         ["`legend_title`", "`str | None`", "`None`", "Optional legend title."],
         ["`axis`", "`bool`", "`False`", "Show coordinate axes and ticks; hidden by default for maps."],
@@ -831,11 +1067,13 @@ def _plot_notebook(model) -> dict:
         ["`figsize`", "`tuple[float, float]`", "`(10, 8)`", "Figure size when `ax` is not supplied."],
         ["`dpi`", "`int`", "`300`", "Figure resolution for new figures and saved output."],
         ["`ax`", "matplotlib `Axes | None`", "`None`", "Draw into existing axes when supplied."],
-        ["`show`", "`bool`", "`True`", "Call `plt.show()` after rendering."],
+        ["`show`", "`bool`", "`True`", "Display the completed figure; `False` suppresses automatic notebook display for function-created figures."],
         ["`nodes`", "`dict | bool | None`", "`None`", "Node-layer styling dictionary or visibility flag."],
         ["`links`", "`dict | bool | None`", "`None`", "Link-layer styling dictionary or visibility flag."],
         ["`subcatchments`", "`dict | bool | None`", "`None`", "Subcatchment-layer styling dictionary or visibility flag."],
+        ["`subcatchment_outlets`", "`dict | bool | None`", "`None`", "Dashed subcatchment-to-outlet connector layer."],
         ["`rain_gages`", "`dict | bool | None`", "`None`", "Rain-gage-layer styling dictionary or visibility flag."],
+        ["`lids`", "`dict | bool | None`", "`None`", "LID-usage marker layer."],
         ["`labels`", "`dict | bool | None`", "`None`", "Label-layer styling dictionary or visibility flag."],
         ["`link_color_by`", "`str | None`", "`None`", "Alias for parameter-driven link color."],
         ["`link_color_mode`", "`str | None`", "`None`", "Alias mode for link color: continuous or discrete."],
@@ -845,10 +1083,12 @@ def _plot_notebook(model) -> dict:
         ["`link_user_data`", "`mapping | Series | None`", "`None`", "Alias for user-driven link color data."],
     ]
     layer_rows = [
-        ["`nodes`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `edge_color`, `marker`, `linewidth`, `ids`", "`size=30`, `color='black'`, `edge_color='white'`, `marker='o'`"],
-        ["`links`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `width`, `color`, `linestyle`, `ids`", "`width=1.5`, `color='gray'`, `linestyle='-'`"],
+        ["`nodes`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `edge_color`, `marker`, `type_markers`, `linewidth`, `ids`", "Type markers: junction `o`, outfall `v`, divider `D`, storage `s`"],
+        ["`links`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `width`, `size`, `color`, `linestyle`, `type_linestyles`, `ids`", "Type lines: conduit solid, pump dash-dot, orifice dotted, weir dashed, outlet long-dashed"],
         ["`subcatchments`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `color`, `edge_color`, `linewidth`, `ids`", "`color='lightgreen'`, `edge_color='green'`, `alpha=0.25`"],
+        ["`subcatchment_outlets`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `width`, `color`, `linestyle`, `ids`", "Dashed gray connector from centroid to outlet"],
         ["`rain_gages`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `marker`, `ids`", "`size=45`, `color='tab:blue'`, `marker='^'`"],
+        ["`lids`", "`visible`, `label`, `legend`, `alpha`, `zorder`, `size`, `color`, `edge_color`, `linewidth`, `markers`", "One distinct marker per LID control ID when usages exist"],
         ["`labels`", "`visible`, `alpha`, `zorder`, `fontsize`, `color`", "`visible=False`, `fontsize=8`, `color='black'`"],
     ]
     style_rows = [
@@ -861,7 +1101,7 @@ def _plot_notebook(model) -> dict:
         ["`vmin`, `vmax`", "numeric bounds", "Optional continuous color scaling bounds."],
         ["`aggregation`", "`last`, `max`, `min`, `mean`, `median`, or `sum`", "Collapse result time series to one value per object."],
         ["`time_step`, `time`", "integer index or timestamp-like value", "Select one result instant instead of aggregating."],
-        ["`legend`, `legend_title`", "`bool`, `str`", "Control colorbar/legend presentation."],
+        ["`legend`, `legend_title`", "`bool`, `str`", "Control the dedicated custom-style legend section or labeled colorbar."],
         ["`min_size`, `max_size`", "numeric bounds", "Node-size scaling bounds."],
         ["`min_width`, `max_width`", "numeric bounds", "Link-width scaling bounds."],
         ["`labels`, `bins`", "sequence metadata", "Accepted style metadata for discrete presentation; labels are used for color categories."],
@@ -963,7 +1203,21 @@ def _plot_notebook(model) -> dict:
             "example_path = Path('examples/example.inp')\n"
             "output_dir = Path('examples/output')\n"
             "output_dir.mkdir(parents=True, exist_ok=True)\n"
-            "m = swmm(example_path)\n"
+            "m = swmm(example_path)\n\n"
+            "# Public getters keep the examples model-aware instead of relying on placeholder IDs.\n"
+            "node_ids = list(m.get.node.id(format='np'))\n"
+            "link_ids = list(m.get.link.id(format='np'))\n"
+            "subcatchment_ids = list(m.get.subcatchment.id(format='np'))\n"
+            "rain_gage_ids = list(m.get.rain_gage.id(format='np'))\n"
+            "selected_node_ids = [node_ids[0], node_ids[-1]] if len(node_ids) >= 2 else node_ids[:1]\n"
+            "selected_link_ids = link_ids[:2]\n"
+            "selected_subcatchment_ids = subcatchment_ids[:2]\n"
+            "selected_rain_gage_ids = rain_gage_ids[:1]\n"
+            "node_class_data = {node_id: ('Outfall' if node_id.lower() == 'outlet' else 'Junction') for node_id in selected_node_ids}\n"
+            "node_size_data = {node_id: index + 1 for index, node_id in enumerate(selected_node_ids)}\n"
+            "link_width_data = {link_id: index + 1 for index, link_id in enumerate(selected_link_ids)}\n"
+            "link_class_data = {link_id: ('Main' if index == 0 else 'Secondary') for index, link_id in enumerate(selected_link_ids)}\n"
+            "subcatchment_class_data = {subcatchment_id: ('Low' if index == 0 else 'High') for index, subcatchment_id in enumerate(selected_subcatchment_ids)}\n"
         ),
         _md(
             "## Plotting families\n\n"
@@ -980,13 +1234,16 @@ def _plot_notebook(model) -> dict:
         _md(
             "## `m.plot_layout()`\n\n"
             "Layout plots read map geometry from `[COORDINATES]`, `[VERTICES]`, `[POLYGONS]`, and `[SYMBOLS]`. "
-            "Elements with unusable coordinates are skipped with warnings; if no plottable geometry exists, the call raises `PlotDataError`.\n\n"
+            "Elements with unusable coordinates are skipped with warnings; if no plottable geometry exists, the call raises `PlotDataError`. "
+            "Subcatchment centroids are derived from polygon geometry, then connected to outlet nodes or downstream subcatchments with dashed lines. "
+            "Node/link symbology is type-aware by default, and LID usage markers are drawn at subcatchment centroids when present. "
+            "On non-interactive matplotlib canvases such as Agg, `show=True` avoids useless GUI calls but keeps the figure available for Spyder/Jupyter rendering; `show=False` removes only the library-created figure manager so hidden plots stay hidden.\n\n"
             + _table(["Input", "Type", "Default", "Meaning"], layout_options)
         ),
         _md("### Layout layer dictionaries\n\n" + _table(["Layer", "Supported keys", "Important defaults"], layer_rows)),
         _md(
             "### Data-driven layout style dictionaries\n\n"
-            "The `color`, node `size`, and link `width` keys can be static values or richer dictionaries. "
+            "The `color`, node `size`, and link `width`/`size` keys can be static values or richer dictionaries. "
             "Result-driven encodings require `m.run()` first.\n\n"
             + _table(["Key", "Accepted values", "Meaning"], style_rows)
         ),
@@ -1009,9 +1266,20 @@ def _plot_notebook(model) -> dict:
             "        }\n"
             "    }\n"
             ")\n\n"
+            "m.plot_layout(\n"
+            "    nodes={'ids': selected_node_ids, 'size': {'by': 'user', 'data': node_size_data}},\n"
+            "    links={'ids': selected_link_ids, 'width': {'by': 'user', 'data': link_width_data}},\n"
+            "    subcatchments={'ids': selected_subcatchment_ids, 'color': {'by': 'parameter', 'variable': 'area', 'mode': 'continuous'}},\n"
+            ")\n\n"
+            "m.run()\n"
+            "m.plot_layout(\n"
+            "    nodes={'size': {'by': 'result', 'variable': 'depth', 'aggregation': 'max'}},\n"
+            "    links={'color': {'by': 'result', 'category': 'link', 'variable': 'flow', 'aggregation': 'max'}},\n"
+            ")\n\n"
             "m.plot_layout(link_color_by='roughness', link_color_mode='continuous', link_cmap='viridis')\n"
             "```\n"
         ),
+        _md(_layout_layer_example_text()),
         _code(
             "fig, ax = m.plot_layout(\n"
             "    title='Network layout',\n"

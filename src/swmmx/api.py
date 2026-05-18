@@ -1841,7 +1841,9 @@ class SWMMModel:
         nodes=None,
         links=None,
         subcatchments=None,
+        subcatchment_outlets=None,
         rain_gages=None,
+        lids=None,
         labels=None,
         link_color_by=None,
         link_color_mode=None,
@@ -1856,16 +1858,27 @@ class SWMMModel:
         ----------
         legend, grid, title, legend_title, axis, x_axis_title, y_axis_title:
             Common presentation controls.  Coordinate axes are hidden by
-            default; legends are shown by default.
+            default; legends are shown by default.  ``grid=True`` keeps a
+            visible reference grid even when coordinate labels remain hidden.
         save_format, save_path:
             Optional figure-saving controls.  Supplying only ``save_format``
             writes ``swmm_layout.<format>`` beside the model path when possible.
         figsize, dpi, ax, show:
             Standard matplotlib controls.  Supply ``ax`` to compose into an
-            existing figure; use ``show=False`` in scripts and tests.
-        nodes, links, subcatchments, rain_gages, labels:
+            existing figure; use ``show=False`` in scripts and tests to
+            suppress automatic figure display while still receiving ``(fig,
+            ax)``.  Non-interactive canvases such as Agg are not sent GUI show
+            requests, but figures remain available for notebook/IDE rendering
+            when ``show=True``.
+        nodes, links, subcatchments, subcatchment_outlets, rain_gages, lids, labels:
             Optional layer dictionaries supporting static styling and, for the
-            first three layers, data-driven color/size encodings.
+            first three layers, data-driven color encodings; nodes and links
+            also support data-driven size/width encodings.  Node and link
+            symbology is type-aware by default, subcatchment outlet connectors
+            are drawn as dashed lines, and LID usage markers are added when
+            present.  Data-driven color, size, and width styles add dedicated
+            legend sections or labeled colorbars when their nested ``legend``
+            option is enabled.
 
         Examples
         --------
@@ -1915,7 +1928,9 @@ class SWMMModel:
             nodes=nodes,
             links=links,
             subcatchments=subcatchments,
+            subcatchment_outlets=subcatchment_outlets,
             rain_gages=rain_gages,
+            lids=lids,
             labels=labels,
             link_color_by=link_color_by,
             link_color_mode=link_color_mode,
