@@ -524,8 +524,8 @@ def _plot_profile(
                 [guide_y_min, guide_y_max],
                 linestyle=":",
                 color="0.55",
-                linewidth=0.8,
-                alpha=0.8,
+                linewidth=2.2,
+                alpha=0.9,
                 zorder=0,
                 label="Node locations" if index == 0 else "_nolegend_",
             )

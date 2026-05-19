@@ -359,6 +359,7 @@ def plot_timeseries(
         x_axis_title=generated_x_label,
         y_axis_title=generated_y_label,
         safe_cartesian_axes=True,
+        x_tick_label_rotation=45,
     )
     if legend and len(frame.columns) > 0:
         add_safe_line_legend(ax, title=legend_title)

@@ -483,6 +483,7 @@ def test_plot_timeseries_public_signature_and_time_formats_are_simplified():
 
     fig, ax = model.plot_timeseries.link.flow("P001", time_format="datetime", show=False)
     assert any("-" in text.get_text() for text in ax.texts if text.get_label() == "_swmmx_axis_tick_label")
+    assert any(text.get_rotation() == 45 for text in ax.texts if text.get_label() == "_swmmx_axis_tick_label")
     assert any(text.get_text() == "Date and Time" for text in ax.texts if text.get_label() == "_swmmx_axis_label")
     _close(fig)
 
@@ -556,7 +557,10 @@ def test_plot_profile_validates_paths_finds_nodes_and_longest(tmp_path):
 
     fig, ax = model.plot_profile.links(["P001", "P005"], show=False)
     assert fig is ax.figure
-    assert any(line.get_label() == "Node locations" and line.get_linestyle() == ":" for line in ax.lines)
+    assert any(
+        line.get_label() == "Node locations" and line.get_linestyle() == ":" and line.get_linewidth() >= 2.0
+        for line in ax.lines
+    )
     assert any(text.get_text() == "P001" for text in ax.texts)
     assert any(text.get_text() == "P005" for text in ax.texts)
     assert any(text.get_text() == "Distance (ft)" for text in ax.texts if text.get_label() == "_swmmx_axis_label")

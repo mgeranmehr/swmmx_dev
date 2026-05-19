@@ -145,6 +145,7 @@ def apply_axes_options(
     y_axis_title: str | None,
     safe_layout_axes: bool = False,
     safe_cartesian_axes: bool = False,
+    x_tick_label_rotation: float = 0.0,
 ) -> None:
     """Apply shared axis options, with native-axis-free modes where needed."""
 
@@ -174,6 +175,7 @@ def apply_axes_options(
             title=title,
             x_axis_title=x_axis_title,
             y_axis_title=y_axis_title,
+            x_tick_label_rotation=x_tick_label_rotation,
         )
         return
 
@@ -398,6 +400,7 @@ def _apply_safe_cartesian_axes(
     title: str | None,
     x_axis_title: str | None,
     y_axis_title: str | None,
+    x_tick_label_rotation: float = 0.0,
 ) -> None:
     """Render ordinary chart axes without drawing Matplotlib Axis artists."""
 
@@ -428,6 +431,7 @@ def _apply_safe_cartesian_axes(
             y_labels=y_labels,
             x_axis_title=x_axis_title,
             y_axis_title=y_axis_title,
+            x_tick_label_rotation=x_tick_label_rotation,
         )
     if title:
         _add_safe_axes_title(ax, title, label="_swmmx_cartesian_title")
@@ -505,6 +509,7 @@ def _add_safe_cartesian_axis(
     y_labels: list[str],
     x_axis_title: str | None,
     y_axis_title: str | None,
+    x_tick_label_rotation: float = 0.0,
 ) -> None:
     """Draw frame, tick marks, labels, and titles for ordinary charts."""
 
@@ -543,8 +548,10 @@ def _add_safe_cartesian_axis(
             x_value,
             ymin - 2.0 * tick_y_length,
             text_value,
-            ha="center",
+            ha="right" if x_tick_label_rotation else "center",
             va="top",
+            rotation=x_tick_label_rotation,
+            rotation_mode="anchor" if x_tick_label_rotation else None,
             clip_on=False,
             fontsize=8,
             label="_swmmx_axis_tick_label",
