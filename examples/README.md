@@ -26,6 +26,7 @@ Additional notebooks:
 | `13_all_add_functions.ipynb` | Categorized reference notebook for every public add endpoint, including inputs, types, defaults, and conditions |
 | `14_all_remove_functions.ipynb` | Categorized reference notebook for every public remove endpoint, including dependencies, force behavior, and outputs |
 | `15_all_plot_functions.ipynb` | Comprehensive plotting reference for layout, time-series, and profile APIs, including every input, output, variable family, style table, and save rule |
+| `16_all_import_export_functions.ipynb` | Comprehensive import/export reference for `m.import_csv`, `m.import_gis`, field matching, result objects, options, troubleshooting, and export workflows |
 
 Run an example from the repository root:
 
@@ -47,12 +48,13 @@ jupyter notebook examples/12_all_set_functions.ipynb
 jupyter notebook examples/13_all_add_functions.ipynb
 jupyter notebook examples/14_all_remove_functions.ipynb
 jupyter notebook examples/15_all_plot_functions.ipynb
+jupyter notebook examples/16_all_import_export_functions.ipynb
 ```
 
 Notes:
 
 - Plotting examples require `matplotlib`.
-- GIS export requires optional `geopandas` and `shapely`.
+- GIS import/export requires optional `geopandas` and `shapely`.
 - Excel export requires optional `openpyxl`.
 - Run-based examples require a working EPA SWMM engine for the current platform.
 - `03_step_by_step_runs_dynamic_control.py` is intentionally honest about the current boundary: step timing is available, while live `step.get` / `step.set` control is future work.

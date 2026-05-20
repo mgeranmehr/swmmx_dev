@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swmmx"
-version = "0.0.32"
-description = "A professional, cross-platform Python toolkit for EPA SWMM."
+version = "0.0.36"
+description = "A Unified Python Toolkit for Building, Editing, Running, Importing, Visualizing, and Exporting EPA SWMM Models."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

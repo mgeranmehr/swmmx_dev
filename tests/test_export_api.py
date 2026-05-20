@@ -27,8 +27,45 @@ def test_export_csv_creates_selected_files_and_unknown_element_is_helpful(tmp_pa
     assert set(outputs) == {"nodes", "links"}
     assert outputs["nodes"].exists()
     assert outputs["links"].exists()
+    nodes = pd.read_csv(outputs["nodes"])
+    links = pd.read_csv(outputs["links"])
+    assert "coordinates" in nodes.columns
+    assert "coordinates" in links.columns
+    assert nodes["coordinates"].notna().any()
+    assert links["coordinates"].notna().any()
+    assert {"x", "y"} <= set(nodes.columns)
+    assert {"x", "y"}.isdisjoint(links.columns)
     with pytest.raises(UnknownExportElementError, match="Did you mean 'conduits'"):
         model.export.csv(path=tmp_path, elements="conduitz")
+
+
+def test_export_csv_all_nonempty_tables_include_coordinates_column(tmp_path):
+    model = swmm(EXAMPLE)
+
+    outputs = model.export.csv(path=tmp_path, elements="all", include_results=False)
+
+    assert outputs
+    for path in outputs.values():
+        frame = pd.read_csv(path)
+        assert "coordinates" in frame.columns
+
+
+def test_export_csv_point_based_tables_include_x_y_and_links_do_not(tmp_path):
+    model = swmm(EXAMPLE)
+
+    outputs = model.export.csv(
+        path=tmp_path,
+        elements=["nodes", "junctions", "outfalls", "rain_gages", "subcatchments", "treatments", "coverages", "links"],
+        include_results=False,
+    )
+
+    for element in ("nodes", "junctions", "outfalls", "rain_gages", "subcatchments", "treatments", "coverages"):
+        frame = pd.read_csv(outputs[element])
+        assert {"x", "y"} <= set(frame.columns)
+        assert frame["x"].notna().any()
+        assert frame["y"].notna().any()
+    links = pd.read_csv(outputs["links"])
+    assert {"x", "y"}.isdisjoint(links.columns)
 
 
 def test_export_csv_attaches_last_results_and_strict_mode_controls_missing_results(tmp_path):
@@ -65,6 +102,11 @@ def test_export_excel_creates_workbook_and_selected_sheets(tmp_path):
     assert workbook.exists()
     sheets = pd.ExcelFile(workbook).sheet_names
     assert sheets == ["nodes", "links"]
+    workbook_data = pd.read_excel(workbook, sheet_name=None)
+    assert "coordinates" in workbook_data["nodes"].columns
+    assert "coordinates" in workbook_data["links"].columns
+    assert {"x", "y"} <= set(workbook_data["nodes"].columns)
+    assert {"x", "y"}.isdisjoint(workbook_data["links"].columns)
 
     only_conduits = model.export.excel(
         path=tmp_path,
@@ -117,3 +159,12 @@ def test_export_gis_writes_spatial_layers(tmp_path):
     assert set(gpd.read_file(node_outputs["nodes"]).geometry.geom_type) == {"Point"}
     assert set(gpd.read_file(link_outputs["links"]).geometry.geom_type) == {"LineString"}
     assert set(gpd.read_file(sub_outputs["subcatchments"]).geometry.geom_type) == {"Polygon"}
+    node_columns = {column.lower() for column in gpd.read_file(node_outputs["nodes"]).columns}
+    link_columns = {column.lower() for column in gpd.read_file(link_outputs["links"]).columns}
+    sub_columns = {column.lower() for column in gpd.read_file(sub_outputs["subcatchments"]).columns}
+    assert any(column.startswith("coordinate") for column in node_columns)
+    assert any(column.startswith("coordinate") for column in link_columns)
+    assert any(column.startswith("coordinate") for column in sub_columns)
+    assert {"x", "y"} <= node_columns
+    assert {"x", "y"} <= sub_columns
+    assert {"x", "y"}.isdisjoint(link_columns)

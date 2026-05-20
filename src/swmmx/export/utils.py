@@ -6,6 +6,7 @@ from collections import OrderedDict
 from difflib import get_close_matches
 from pathlib import Path
 from typing import TYPE_CHECKING
+import json
 import re
 import warnings
 
@@ -150,6 +151,230 @@ RESULT_VARIABLES = {
     "outlets": ("link", ("flow", "depth", "velocity", "capacity", "volume")),
     "subcatchments": ("subcatchment", ("runoff", "rainfall", "infiltration", "evaporation")),
 }
+
+NODE_EXPORT_ELEMENTS = {"nodes", "junctions", "outfalls", "dividers", "storage_units"}
+LINK_EXPORT_ELEMENTS = {"links", "conduits", "pumps", "orifices", "weirs", "outlets"}
+NODE_ATTACHED_EXPORT_ELEMENTS = {"external_inflows", "dry_weather_flows", "rdii", "treatments"}
+RAINGAGE_ATTACHED_EXPORT_ELEMENTS = {"unit_hydrographs"}
+SUBCATCHMENT_ATTACHED_EXPORT_ELEMENTS = {"coverages", "loadings", "lid_usage"}
+XY_EXPORT_ELEMENTS = (
+    NODE_EXPORT_ELEMENTS
+    | {"rain_gages", "subcatchments"}
+    | NODE_ATTACHED_EXPORT_ELEMENTS
+    | RAINGAGE_ATTACHED_EXPORT_ELEMENTS
+    | SUBCATCHMENT_ATTACHED_EXPORT_ELEMENTS
+)
+
+
+def _xy_map(model: "SWMMModel", section: str) -> dict[str, tuple[float, float]]:
+    """Return ID-indexed XY points from one ordinary map-coordinate section."""
+
+    points: dict[str, tuple[float, float]] = {}
+    for row in model._document.rows(section):
+        if len(row) < 3:
+            continue
+        try:
+            points[str(row[0])] = (float(row[1]), float(row[2]))
+        except (TypeError, ValueError):
+            continue
+    return points
+
+
+def _grouped_xy_map(model: "SWMMModel", section: str) -> dict[str, list[tuple[float, float]]]:
+    """Return ID-indexed ordered XY point lists from a map-coordinate section."""
+
+    grouped: dict[str, list[tuple[float, float]]] = {}
+    for row in model._document.rows(section):
+        if len(row) < 3:
+            continue
+        try:
+            grouped.setdefault(str(row[0]), []).append((float(row[1]), float(row[2])))
+        except (TypeError, ValueError):
+            continue
+    return grouped
+
+
+def _link_endpoint_rows(model: "SWMMModel") -> dict[str, tuple[str, str]]:
+    """Return link endpoint IDs for ordinary routed link sections."""
+
+    endpoints: dict[str, tuple[str, str]] = {}
+    for section in ("CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS"):
+        for row in model._document.rows(section):
+            if len(row) >= 3:
+                endpoints[str(row[0])] = (str(row[1]), str(row[2]))
+    return endpoints
+
+
+def _coordinate_maps(model: "SWMMModel") -> dict[str, object]:
+    """Collect map-coordinate lookup tables used by all export frontends."""
+
+    return {
+        "nodes": _xy_map(model, "COORDINATES"),
+        "rain_gages": _xy_map(model, "SYMBOLS"),
+        "vertices": _grouped_xy_map(model, "VERTICES"),
+        "polygons": _grouped_xy_map(model, "POLYGONS"),
+        "endpoints": _link_endpoint_rows(model),
+    }
+
+
+def _json_coordinates(value) -> str | None:
+    """Serialize point/list geometry into a stable CSV/Excel/GIS attribute value."""
+
+    if value is None:
+        return None
+    if isinstance(value, tuple):
+        value = list(value)
+    elif isinstance(value, list):
+        value = [list(point) if isinstance(point, tuple) else point for point in value]
+    return json.dumps(value, separators=(",", ":"))
+
+
+def _polygon_centroid(points: list[tuple[float, float]] | None) -> tuple[float, float] | None:
+    """Return the geometric centroid of a polygon point sequence."""
+
+    if not points:
+        return None
+    if len(points) < 3:
+        return (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
+    area_twice = 0.0
+    cx_sum = 0.0
+    cy_sum = 0.0
+    for point, next_point in zip(points, [*points[1:], points[0]]):
+        cross = point[0] * next_point[1] - next_point[0] * point[1]
+        area_twice += cross
+        cx_sum += (point[0] + next_point[0]) * cross
+        cy_sum += (point[1] + next_point[1]) * cross
+    if abs(area_twice) < 1e-12:
+        return (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
+    return cx_sum / (3.0 * area_twice), cy_sum / (3.0 * area_twice)
+
+
+def _row_field(row: pd.Series, name: str) -> str | None:
+    """Return a non-empty string value from a row field."""
+
+    value = row.get(name)
+    if value is None:
+        return None
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    text = str(value)
+    return text if text else None
+
+
+def _link_coordinates(link_id: str, maps: dict[str, object]):
+    """Return the best available full coordinate chain for one link."""
+
+    node_points: dict[str, tuple[float, float]] = maps["nodes"]  # type: ignore[assignment]
+    vertices: dict[str, list[tuple[float, float]]] = maps["vertices"]  # type: ignore[assignment]
+    endpoints: dict[str, tuple[str, str]] = maps["endpoints"]  # type: ignore[assignment]
+    endpoint_pair = endpoints.get(link_id)
+    if endpoint_pair and endpoint_pair[0] in node_points and endpoint_pair[1] in node_points:
+        return [node_points[endpoint_pair[0]], *vertices.get(link_id, []), node_points[endpoint_pair[1]]]
+    return vertices.get(link_id)
+
+
+def _coordinates_for_row(element: str, row: pd.Series, maps: dict[str, object]):
+    """Return the map coordinates associated with one export row, when available."""
+
+    node_points: dict[str, tuple[float, float]] = maps["nodes"]  # type: ignore[assignment]
+    rain_points: dict[str, tuple[float, float]] = maps["rain_gages"]  # type: ignore[assignment]
+    polygons: dict[str, list[tuple[float, float]]] = maps["polygons"]  # type: ignore[assignment]
+
+    object_id = _row_field(row, "id")
+    if element in NODE_EXPORT_ELEMENTS and object_id is not None:
+        return node_points.get(object_id)
+    if element in LINK_EXPORT_ELEMENTS and object_id is not None:
+        return _link_coordinates(object_id, maps)
+    if element == "rain_gages" and object_id is not None:
+        return rain_points.get(object_id)
+    if element == "subcatchments" and object_id is not None:
+        return polygons.get(object_id)
+
+    subcatchment_id = _row_field(row, "subcatchment_id")
+    if subcatchment_id is not None and subcatchment_id in polygons:
+        return polygons[subcatchment_id]
+    node_id = _row_field(row, "node_id")
+    if node_id is not None and node_id in node_points:
+        return node_points[node_id]
+
+    if object_id is not None:
+        if object_id in node_points:
+            return node_points[object_id]
+        if object_id in rain_points:
+            return rain_points[object_id]
+        if object_id in polygons:
+            return polygons[object_id]
+        link_coordinates = _link_coordinates(object_id, maps)
+        if link_coordinates:
+            return link_coordinates
+    return None
+
+
+def _xy_for_row(element: str, row: pd.Series, maps: dict[str, object]) -> tuple[float, float] | None:
+    """Return point-style x/y coordinates for node-like export rows."""
+
+    node_points: dict[str, tuple[float, float]] = maps["nodes"]  # type: ignore[assignment]
+    rain_points: dict[str, tuple[float, float]] = maps["rain_gages"]  # type: ignore[assignment]
+    polygons: dict[str, list[tuple[float, float]]] = maps["polygons"]  # type: ignore[assignment]
+
+    object_id = _row_field(row, "id")
+    if element in NODE_EXPORT_ELEMENTS and object_id is not None:
+        return node_points.get(object_id)
+    if element == "rain_gages" and object_id is not None:
+        return rain_points.get(object_id)
+    if element == "subcatchments" and object_id is not None:
+        return _polygon_centroid(polygons.get(object_id))
+    if element in LINK_EXPORT_ELEMENTS:
+        return None
+
+    node_id = _row_field(row, "node_id")
+    if element in NODE_ATTACHED_EXPORT_ELEMENTS and node_id is not None:
+        return node_points.get(node_id)
+    rain_gage_id = _row_field(row, "rain_gage")
+    if element in RAINGAGE_ATTACHED_EXPORT_ELEMENTS and rain_gage_id is not None:
+        return rain_points.get(rain_gage_id)
+    subcatchment_id = _row_field(row, "subcatchment_id")
+    if element in SUBCATCHMENT_ATTACHED_EXPORT_ELEMENTS and subcatchment_id is not None:
+        return _polygon_centroid(polygons.get(subcatchment_id))
+    return None
+
+
+def _attach_spatial_fields(model: "SWMMModel", element: str, frame: pd.DataFrame) -> pd.DataFrame:
+    """Add shared serialized coordinates plus node-like ``x``/``y`` columns."""
+
+    result = frame.copy()
+    maps = _coordinate_maps(model)
+    if result.empty:
+        if "coordinates" not in result.columns:
+            result["coordinates"] = pd.Series(dtype=object)
+        if element in XY_EXPORT_ELEMENTS:
+            if "x" not in result.columns:
+                result["x"] = pd.Series(dtype=float)
+            if "y" not in result.columns:
+                result["y"] = pd.Series(dtype=float)
+        return result
+    rows = list(result.iterrows())
+    if "coordinates" not in result.columns:
+        result["coordinates"] = [
+            _json_coordinates(_coordinates_for_row(element, row, maps))
+            for _index, row in rows
+        ]
+    if element in XY_EXPORT_ELEMENTS and ("x" not in result.columns or "y" not in result.columns):
+        xy_values = [_xy_for_row(element, row, maps) for _index, row in rows]
+        if "x" not in result.columns:
+            result["x"] = [point[0] if point is not None else None for point in xy_values]
+        if "y" not in result.columns:
+            result["y"] = [point[1] if point is not None else None for point in xy_values]
+    return result
 
 
 def _rows_to_frame(rows: list[list[str]], columns: tuple[str, ...]) -> pd.DataFrame:
@@ -450,6 +675,7 @@ def _collect_export_tables(
             frame = frame.loc[:, retained].copy()
         else:
             frame = frame.copy()
+        frame = _attach_spatial_fields(model, element, frame)
         if include_derived and include_parameters and id_column == "id" and not frame.empty:
             derived = _get_derived_table(model, element, frame["id"].astype(str).tolist())
             if len(derived.columns) > 1:
@@ -518,4 +744,3 @@ def _sanitize_excel_sheet_name(name: str, used: set[str]) -> str:
         suffix += 1
     used.add(candidate)
     return candidate
-

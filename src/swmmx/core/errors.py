@@ -122,3 +122,30 @@ class UnknownExportElementError(ExportError):
 class OptionalDependencyError(ExportError):
     """Raised when an optional export dependency is not installed."""
 
+
+class SwmmxImportError(SWMMXError):
+    """Base class for import-specific failures."""
+
+
+class SwmmxImportDependencyError(SwmmxImportError):
+    """Raised when an optional import dependency is not installed."""
+
+
+class SwmmxImportFieldError(SwmmxImportError):
+    """Raised when source fields cannot be matched safely."""
+
+
+class SwmmxImportAmbiguousFieldError(SwmmxImportFieldError):
+    """Raised when multiple source columns match the same import field."""
+
+
+class SwmmxImportMissingFieldError(SwmmxImportFieldError):
+    """Raised when required import fields are missing."""
+
+
+class SwmmxImportValidationError(SwmmxImportError):
+    """Raised when import row validation or model mutation fails."""
+
+
+class SwmmxImportUnsupportedCategoryError(SwmmxImportError):
+    """Raised when an import endpoint is reserved but unsupported."""

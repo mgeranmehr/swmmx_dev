@@ -15,6 +15,7 @@ from .counts import CountRoot
 from .engine import EngineLoader
 from .elements import EditableElementRegistry, EditableElementService, EditableRoot
 from .export import ExportAccessor
+from .imports import ImportRoot
 from .errors import (
     FormatError,
     InvalidReferenceError,
@@ -132,6 +133,8 @@ class SWMMModel:
         self.plot_timeseries = PlotTimeseriesRoot(self)
         self.plot_profile = PlotProfileAccessor(self)
         self.export = ExportAccessor(self)
+        self.import_csv = ImportRoot(self, source_type="csv")
+        self.import_gis = ImportRoot(self, source_type="gis")
 
         # Run state is intentionally separate from input state so clones and
         # edits cannot accidentally masquerade as fresh results.
