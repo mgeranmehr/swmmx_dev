@@ -23,7 +23,7 @@ fig, _ = m.plot_timeseries.conduit.flow(
     show=True,
     save_path=output_dir / "simple_timeseries_one_conduit.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_timeseries.conduit.flow(
     ["P001", "P005"],
@@ -33,7 +33,7 @@ fig, _ = m.plot_timeseries.conduit.flow(
     show=True,
     save_path=output_dir / "simple_timeseries_two_conduits.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_timeseries.node.depth(
     "P001",
@@ -41,7 +41,7 @@ fig, _ = m.plot_timeseries.node.depth(
     show=True,
     save_path=output_dir / "simple_timeseries_node_depth.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 
 

@@ -20,6 +20,8 @@
 
 `swmmx` A Unified Python Toolkit for Building, Editing, Running, Importing, Visualizing, and Exporting EPA SWMM Models:
 
+Help: [Documentation](https://mgeranmehr.github.io/swmmx/index.html)
+
 Install: 
 
 ```python
@@ -41,7 +43,7 @@ print(m.log())
 m.plot_timeseries.link.flow()
 ```
 
-Version `0.0.37` currently provides:
+Version `0.0.39` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
@@ -52,7 +54,7 @@ Version `0.0.37` currently provides:
 - tabular and spatial imports through `m.import_csv.<category>.<element_type>()` and `m.import_gis.<category>.<element_type>()`
 - external-format export through `m.export.gis()`, `m.export.csv()`, and `m.export.excel()`
 - `m.save()`, `m.run()`, **`m.runs()` for step-by-step simulation**, `m.validate()`, `m.log()`, and `m.clone()`
-- lazy native-engine loading for bundled Windows/Linux engines plus custom engine paths
+- lazy native-engine loading for bundled Windows/Linux/macOS engines plus custom engine paths
 - preserving `.inp` parsing/writing that keeps comments, unknown sections, and section order whenever possible
 
 Constructor examples:
@@ -108,7 +110,7 @@ The package includes the supplied bundled engines:
 
 - Windows 64-bit: `swmm5.dll`
 - Linux 64-bit: `libswmm5.so`
-- macOS: reserved path only for now; provide a custom engine path until a GitHub Actions build is added
+- macOS: `libswmm5.dylib`
 
 ## Time semantics
 
@@ -271,6 +273,17 @@ m.plot_layout(
     }
 )
 
+m.plot_layout(
+    annotation={
+        "nodes": "id",
+        "conduits": {
+            "template": "{id}\nD={diameter:.2f} m",
+            "rotation": "link",
+            "bbox": True,
+        },
+    }
+)
+
 m.plot_timeseries.link.flow(["C1", "C2"])
 
 m.plot_profile.nodes(
@@ -284,6 +297,8 @@ m.plot_profile.nodes(
 `m.plot_layout()` draws mapped subcatchments, links, nodes, rain gages, and LID usages from the model coordinates. Subcatchments show dashed outlet connectors from each polygon centroid to its outlet node or downstream subcatchment. The default symbology is type-aware: node types use different markers, link types use different line styles, and LID controls use distinct markers in the legend when present. Presentation controls are explicit: `title=...` sets the map title, `axis=True` shows coordinate axes, `grid=True` keeps a visible reference grid even when coordinate labels stay hidden, and `show=False` suppresses automatic figure display while still returning `(fig, ax)`. Layout maps now render titles, grids, and visible coordinate axes with safe ordinary artists instead of Matplotlib's native title/tick/grid machinery, avoiding the Spyder/Agg recursive tick-copy path while keeping the same public API. On non-interactive matplotlib canvases such as Agg, `show=True` avoids useless GUI calls but keeps the figure available for Spyder/Jupyter rendering; `show=False` removes only the library-created figure manager so hidden plots stay hidden.
 
 Layer dictionaries support ordinary static styling as well as data-driven styling from fixed input parameters, simulation results, or your own ID-to-value mappings. Nodes, links, and subcatchments can be colored with continuous or discrete colormaps; nodes can use data-driven marker size, and links can use data-driven line width (or the `size` alias). Result-driven styles require a completed run; user-data styles are useful for classes such as risk bands, inspection status, or scenario groups. When color, size, or width is data-driven, the plot adds a dedicated legend section so the encoded value is visible on the finished figure instead of living only in the function call. Continuous-color legends are rendered with safe sampled swatches rather than native Matplotlib colorbar axes, which keeps Spyder/Agg rendering out of the recursive tick-copy path.
+
+`m.plot_layout(annotation=...)` adds map labels without changing existing layout behavior. It supports simple ID annotations, multi-field labels, templates such as `{id}\nD={diameter:.2f} m`, prefixes, suffixes, numeric formatting, callables, per-layer styling, ID and conditional filtering, `max_labels`, external user data, and link-aligned rotation with `rotation="link"`.
 
 `m.plot_timeseries.<category>.<sub_category>()` routes through the result API and plots one or many timestamped series with matplotlib. The time axis has three explicit modes: `time_format="datetime"` for full date-time labels, `time_format="clock"` for hour-minute labels, and `time_format="elapsed"` for elapsed hours. X-axis tick labels are rotated 45 degrees by default for readability. Time-series and profile plots draw their title, grid, frame, ticks, and axis labels with safe ordinary artists instead of Matplotlib's native `Axis` artists, and their legends use lightweight proxy handles rather than cloning plotted `Line2D` artists. This keeps Spyder/Agg out of both recursive marker-copy paths while preserving the same public plotting API.
 
@@ -477,6 +492,6 @@ The first validator checks duplicate IDs, missing required options, invalid unit
 | Round-trip import/export workflow | **Yes — exported CSV designed to import back cleanly** | No | Partial / workflow dependent | Partial / workflow dependent | No |
 | Preserve `.inp` comments / unknown sections / section order | **Yes, where possible** | Not main focus | Strong `.inp` handling | `.inp` handling support | No |
 | Validation helpers | **Yes — `m.validate()` and import result reporting** | Engine/runtime errors | Strong file/model checks depending workflow | Data checks possible | Low-level |
-| Native engine handling | **Bundled Windows/Linux engines plus custom path** | Uses SWMM engine bindings | Runs SWMM through configured executable/tooling | Usually external / integration | Solver bindings |
+| Native engine handling | **Bundled Windows/Linux/macOS engines plus custom path** | Uses SWMM engine bindings | Runs SWMM through configured executable/tooling | Usually external / integration | Solver bindings |
 | Best use case | **Complete model lifecycle in one Python API** | Real-time control and simulation intervention | Advanced `.inp`, `.rpt`, `.out` automation | Pandas/GeoPandas engineering analysis | Developers needing solver/output bindings |
 | Main strength | **Unified, readable, high-level workflow** | Runtime control | Mature file/result automation | Pandas-first productivity | Low-level SWMM access |

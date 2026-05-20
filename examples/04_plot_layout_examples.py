@@ -19,7 +19,7 @@ m.save(output_dir / "simple_04_working_copy.inp")
 m.run()
 
 fig, _ = m.plot_layout(show=False, save_path=output_dir / "simple_layout_basic.png")
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_layout(
     title="Network Layout",
@@ -28,7 +28,7 @@ fig, _ = m.plot_layout(
     show=True,
     save_path=output_dir / "simple_layout_axes.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_layout(
     nodes={"size": 40, "color": "black"},
@@ -37,7 +37,7 @@ fig, _ = m.plot_layout(
     show=True,
     save_path=output_dir / "simple_layout_custom_styles.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_layout(
     links={
@@ -52,7 +52,7 @@ fig, _ = m.plot_layout(
     show=True,
     save_path=output_dir / "simple_layout_by_roughness.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_layout(
     links={
@@ -67,7 +67,7 @@ fig, _ = m.plot_layout(
     show=True,
     save_path=output_dir / "simple_layout_by_max_flow.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 risk_score = {"P001": 1, "P005": 2, "P009": 1, "P011": 3}
 fig, _ = m.plot_layout(
@@ -75,5 +75,5 @@ fig, _ = m.plot_layout(
     show=True,
     save_path=output_dir / "simple_layout_by_user_risk.png",
 )
-plt.close(fig)
+#plt.close(fig)
 

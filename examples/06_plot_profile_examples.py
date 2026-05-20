@@ -29,7 +29,7 @@ fig, _ = m.plot_profile.nodes(
     show=True,
     save_path=output_dir / "simple_profile_nodes.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_profile.links(
     ["P011", "P005", "P001"],
@@ -41,7 +41,7 @@ fig, _ = m.plot_profile.links(
     show=True,
     save_path=output_dir / "simple_profile_links.png",
 )
-plt.close(fig)
+#plt.close(fig)
 
 fig, _ = m.plot_profile.longest(
     show_hgl=True,
@@ -50,5 +50,5 @@ fig, _ = m.plot_profile.longest(
     show=True,
     save_path=output_dir / "simple_profile_longest.png",
 )
-plt.close(fig)
+#plt.close(fig)
 

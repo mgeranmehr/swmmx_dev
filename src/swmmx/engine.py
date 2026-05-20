@@ -178,10 +178,7 @@ class EngineLoader:
         elif system == "linux" and machine in {"amd64", "x86_64"}:
             candidate = package_root / "bin" / "linux" / "libswmm5.so"
         elif system == "darwin":
-            raise EngineNotFoundError(
-                "No bundled macOS SWMM engine is included yet. "
-                "Provide a custom engine path now; a GitHub Actions build slot is reserved for a future release."
-            )
+            candidate = package_root / "bin" / "macos" / "libswmm5.dylib"
         else:
             raise EngineNotFoundError(f"No bundled SWMM engine is available for platform '{system}/{machine}'.")
 
@@ -203,4 +200,3 @@ class EngineLoader:
         except OSError as exc:
             raise EngineLoadError(f"Failed to load SWMM engine '{path}': {exc}") from exc
         return Engine(library=library, path=path)
-

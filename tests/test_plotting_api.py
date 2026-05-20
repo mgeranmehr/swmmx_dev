@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import pytest
 from matplotlib.figure import Figure
 from matplotlib.axis import Axis
@@ -31,6 +32,12 @@ def _close(fig):
     """Close figures promptly so plotting tests stay resource-light."""
 
     plt.close(fig)
+
+
+def _annotation_texts(ax):
+    """Return layout annotation text strings in draw order."""
+
+    return [text.get_text() for text in ax.texts if text.get_label() == "_swmmx_annotation"]
 
 
 def test_plot_layout_returns_fig_ax_hides_axis_and_can_enable_grid():
@@ -444,6 +451,155 @@ def test_plot_layout_draws_lid_usage_markers_when_present():
 
     assert "LID LID_A" in legend_labels
     assert "LID LID_B" in legend_labels
+    _close(fig)
+
+
+def test_plot_layout_annotation_simple_and_multiple_fields():
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(annotation="id", show=False)
+    assert "P001" in _annotation_texts(ax)
+    _close(fig)
+
+    fig, ax = model.plot_layout(annotation={"nodes": "id"}, show=False)
+    texts = _annotation_texts(ax)
+    assert "P001" in texts
+    assert "Outlet" in texts
+    _close(fig)
+
+    fig, ax = model.plot_layout(annotation={"nodes": ["id", "invert_elevation"]}, show=False)
+    assert any("invert_elevation: 1.1" in text for text in _annotation_texts(ax))
+    _close(fig)
+
+
+def test_plot_layout_annotation_templates_prefix_suffix_format_and_callable():
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(
+        annotation={
+            "nodes": {
+                "fields": ["id", "invert_elevation"],
+                "prefix": {"invert_elevation": "Inv: "},
+                "suffix": {"invert_elevation": " m"},
+                "format": {"invert_elevation": ".2f"},
+            },
+            "conduits": {"template": "{id}\nD={diameter:.2f} m\nL={length:.1f} m"},
+        },
+        show=False,
+    )
+    texts = _annotation_texts(ax)
+    assert any("Inv: 1.10 m" in text for text in texts)
+    assert any("D=4.00 m" in text and "L=220.0 m" in text for text in texts)
+    _close(fig)
+
+    fig, ax = model.plot_layout(annotation={"nodes": lambda row: f"Node {row['id']}"}, show=False)
+    assert "Node P001" in _annotation_texts(ax)
+    _close(fig)
+
+
+def test_plot_layout_annotation_filters_max_labels_and_link_rotation():
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(
+        annotation={
+            "nodes": {"template": "{id}", "ids": ["P001"]},
+            "conduits": {"template": "{id}", "where": {"diameter": [">", 0.5]}, "max_labels": 1, "rotation": "link"},
+        },
+        show=False,
+    )
+    texts = [text for text in ax.texts if text.get_label() == "_swmmx_annotation"]
+    assert [text.get_text() for text in texts].count("P001") == 2
+    rotated = [text for text in texts if text.get_text() == "P001" and text.get_ha() == "center"]
+    assert rotated
+    assert rotated[0].get_rotation() != 0
+    _close(fig)
+
+
+def test_plot_layout_annotation_missing_fields_and_invalid_layers_are_clear():
+    model = swmm(EXAMPLE)
+
+    with pytest.raises(PlotDataError, match="missing field"):
+        model.plot_layout(annotation={"nodes": {"template": "{missing_field}"}}, show=False)
+
+    fig, ax = model.plot_layout(
+        annotation={"nodes": {"template": "{missing_field}", "on_annotation_error": "skip"}},
+        show=False,
+    )
+    assert _annotation_texts(ax) == []
+    _close(fig)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fig, ax = model.plot_layout(
+            annotation={"nodes": {"template": "{missing_field}", "on_annotation_error": "warn"}},
+            show=False,
+        )
+    assert _annotation_texts(ax) == []
+    assert any("missing_field" in str(item.message) for item in caught)
+    _close(fig)
+
+    with pytest.raises(PlotDataError, match="Unknown annotation layer"):
+        model.plot_layout(annotation={"pipes": "id"}, show=False)
+
+
+@pytest.mark.parametrize("layer_key", ["node", "nodes", "conduit", "conduits", "rain_gage", "rain_gages"])
+def test_plot_layout_annotation_singular_plural_layer_aliases(layer_key):
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(annotation={layer_key: {"template": "{id}", "max_labels": 1}}, show=False)
+
+    assert len(_annotation_texts(ax)) == 1
+    _close(fig)
+
+
+def test_plot_layout_annotation_user_data_dict_series_and_dataframe():
+    model = swmm(EXAMPLE)
+
+    fig, ax = model.plot_layout(
+        annotation={
+            "conduits": {
+                "template": "{id}\nRisk={risk}\nAge={age}",
+                "data": {"P001": {"risk": "High", "age": 42}},
+                "on_missing_data": "skip",
+            }
+        },
+        show=False,
+    )
+    assert _annotation_texts(ax) == ["P001\nRisk=High\nAge=42"]
+    _close(fig)
+
+    series = pd.Series({"P001": "High"}, name="risk")
+    fig, ax = model.plot_layout(
+        annotation={"conduits": {"template": "{id}: {risk}", "data": series, "on_missing_data": "skip"}},
+        show=False,
+    )
+    assert _annotation_texts(ax) == ["P001: High"]
+    _close(fig)
+
+    frame = pd.DataFrame({"id": ["P001"], "risk": ["High"], "age": [42]})
+    fig, ax = model.plot_layout(
+        annotation={"conduits": {"template": "{id}: {risk}/{age}", "data": frame, "on_missing_data": "skip"}},
+        show=False,
+    )
+    assert _annotation_texts(ax) == ["P001: High/42"]
+    _close(fig)
+
+
+def test_plot_layout_annotation_result_fields_after_run():
+    model = swmm(EXAMPLE)
+    model.run()
+
+    fig, ax = model.plot_layout(
+        annotation={
+            "conduits": {"template": "{id}\nQ={flow:.3f}", "max_labels": 1},
+            "nodes": {"template": "{id}\nDepth={depth:.2f}", "max_labels": 1},
+        },
+        show=False,
+    )
+
+    texts = _annotation_texts(ax)
+    assert any("Q=" in text for text in texts)
+    assert any("Depth=" in text for text in texts)
     _close(fig)
 
 

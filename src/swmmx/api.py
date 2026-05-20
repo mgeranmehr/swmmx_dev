@@ -1694,6 +1694,11 @@ class SWMMModel:
         stem = inp_path.stem
         rpt_path = run_root / f"{stem}.rpt"
         out_path = run_root / f"{stem}.out"
+        for path in (rpt_path, out_path):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                raise SaveError(f"Could not remove stale SWMM run file '{path}': {exc}") from exc
         return inp_path, rpt_path, out_path
 
     def run(self) -> RunResult:
@@ -1854,6 +1859,7 @@ class SWMMModel:
         node_color_result=None,
         node_result_aggregation=None,
         link_user_data=None,
+        annotation=None,
     ):
         """Plot the mapped SWMM network layout with matplotlib.
 
@@ -1883,6 +1889,11 @@ class SWMMModel:
             are drawn as dashed lines, and LID usage markers are added when
             present.  Data-driven color, size, and width styles add dedicated
             legend sections when their nested ``legend`` option is enabled.
+        annotation:
+            Optional text labels for layout objects.  ``"id"`` annotates nodes
+            by ID.  Layer dictionaries support field lists, templates,
+            callables, styling, ID/conditional filtering, max label limits,
+            link rotation, and external user data.
 
         Examples
         --------
@@ -1942,6 +1953,7 @@ class SWMMModel:
             node_color_result=node_color_result,
             node_result_aggregation=node_result_aggregation,
             link_user_data=link_user_data,
+            annotation=annotation,
         )
 
     def section(self, name: str):

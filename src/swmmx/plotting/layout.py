@@ -15,6 +15,7 @@ from matplotlib.patches import Patch, Polygon
 from matplotlib.legend_handler import HandlerPatch
 
 from ..errors import PlotDataError
+from .annotations import draw_layout_annotations
 from .styles import encode_color, encode_size, normalize_layout_configs
 from .utils import apply_axes_options, create_axes, finalize_plot
 
@@ -417,6 +418,7 @@ def plot_layout(
     node_color_result=None,
     node_result_aggregation=None,
     link_user_data=None,
+    annotation=None,
 ):
     """Plot the mapped SWMM layout with static or data-driven styling.
 
@@ -450,6 +452,12 @@ def plot_layout(
         subcatchment centroids when present.  Data-driven color, size, and
         width styles add dedicated legend sections when their nested
         ``legend`` option is enabled.
+    annotation:
+        Optional text labels for layout objects.  ``"id"`` is a shorthand for
+        node ID labels.  Layer dictionaries support field lists, templates,
+        callables, prefixes, suffixes, numeric formats, style options,
+        ``ids``/``where`` filters, ``max_labels``, link-aligned rotation, and
+        external user data.
 
     Examples
     --------
@@ -809,6 +817,20 @@ def plot_layout(
         x_axis_title=x_axis_title or ("X Coordinate" if axis else None),
         y_axis_title=y_axis_title or ("Y Coordinate" if axis else None),
         safe_layout_axes=True,
+    )
+    draw_layout_annotations(
+        ax,
+        model,
+        annotation,
+        plot_context={
+            "node_points": node_points,
+            "rain_points": rain_points,
+            "polygons": polygons,
+            "vertices": vertices,
+            "link_records": link_records,
+            "subcatchment_centroids": subcatchment_centroids,
+            "lid_records": lid_records,
+        },
     )
     if legend and style_legend_sections:
         # One compact legend section per custom visual channel makes the
