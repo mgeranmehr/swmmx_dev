@@ -7,6 +7,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/swmmx.svg)](https://pypi.org/project/swmmx/)
 [![Build](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml/badge.svg)](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml)
 [![Downloads](https://img.shields.io/pypi/dm/swmmx.svg)](https://pypi.org/project/swmmx/)
+[![DOI](https://zenodo.org/badge/1239578696.svg)](https://doi.org/10.5281/zenodo.20312405)
 
 > **Development notice:** `swmmx` is under active testing and development. Issues are being identified and corrected continuously, so please make sure you are using the latest available release before reporting unexpected behavior.
 
@@ -21,6 +22,8 @@
 `swmmx` A Unified Python Toolkit for Building, Editing, Running, Importing, Visualizing, and Exporting EPA SWMM Models:
 
 Help: [Documentation](https://mgeranmehr.github.io/swmmx/index.html)
+
+Citation: Mohammadali Geranmehr. (2026). mgeranmehr/swmmx_dev: swmmx . Zenodo, DOI: [10.5281/zenodo.20312405] (https://doi.org/10.5281/zenodo.20312405)
 
 Install: 
 
