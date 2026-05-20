@@ -4,8 +4,8 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - paper/**
-      - .github/workflows/draft-pdf.yml
+      - "paper/**"
+      - ".github/workflows/draft-pdf.yml"
 
 permissions:
   contents: read
@@ -17,16 +17,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Check paper sources
+        run: |
+          test -f paper/paper.md
+          test -f paper/paper.bib
+          ls -la paper
 
       - name: Build draft PDF
-        uses: openjournals/openjournals-draft-action@master
-        with:
-          journal: joss
-          paper-path: paper/paper.md
+        run: |
+          docker run --rm \
+            --volume "${{ github.workspace }}/paper:/data" \
+            --user "$(id -u):$(id -g)" \
+            --env JOURNAL=joss \
+            openjournals/inara
 
       - name: Upload PDF
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: paper-pdf
           path: paper/paper.pdf
+          if-no-files-found: error

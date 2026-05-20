@@ -7,7 +7,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/swmmx.svg)](https://pypi.org/project/swmmx/)
 [![Build](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml/badge.svg)](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml)
 [![Downloads](https://img.shields.io/pypi/dm/swmmx.svg)](https://pypi.org/project/swmmx/)
-[![DOI](https://zenodo.org/badge/1239578696.svg)](https://doi.org/10.5281/zenodo.20312406)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20312405.svg)](https://doi.org/10.5281/zenodo.20312405)
 
 > **Development notice:** `swmmx` is under active testing and development. Issues are being identified and corrected continuously, so please make sure you are using the latest available release before reporting unexpected behavior.
 
