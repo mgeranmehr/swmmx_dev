@@ -1,4 +1,4 @@
-﻿Category,Element / data,SWMM UI object?,INP section,Required for engine?,Required for GUI/map?,Parameter,Data type,Size,Typical/default,Notes for API/schema
+Category,Element / data,SWMM UI object?,INP section,Required for engine?,Required for GUI/map?,Parameter,Data type,Size,Typical/default,Notes for API/schema
 project,Project title,Yes,[TITLE],No,No,title,str,single/list,empty,Free text
 project,Notes/comments,Yes,comments / [TITLE],No,No,notes,str,list,empty,Preserve comments if possible
 project,Flow units,Yes,[OPTIONS],Yes,Yes,flow_units,enum,single,project default,"CFS, GPM, MGD, CMS, LPS, MLD"
@@ -122,7 +122,7 @@ storage_unit,Storage unit,Yes,[STORAGE],Yes,Yes,id,str,single,required,Unique ID
 storage_unit,Storage unit,Yes,[STORAGE],Yes,No,invert_elevation,float,single,project default,Elevation
 storage_unit,Storage unit,Yes,[STORAGE],Yes,No,max_depth,float,single,project default,Length
 storage_unit,Storage unit,Yes,[STORAGE],No,No,initial_depth,float,single,0,Initial condition
-storage_unit,Storage unit,Yes,[STORAGE],Yes,No,storage_curve_type,enum,single,functional/tabular,Storage relation type
+storage_unit,Storage unit,Yes,[STORAGE],Yes,No,storage_curve_type,enum,single,FUNCTIONAL,FUNCTIONAL/TABULAR/CYLINDRICAL/CONICAL/PARABOLIC/PYRAMIDAL
 storage_unit,Storage unit,Yes,[STORAGE],Conditional,No,storage_curve,ref,single,tabular storage,Curve reference
 storage_unit,Storage unit,Yes,[STORAGE],Conditional,No,area_coefficient,float,single,functional storage,Functional curve
 storage_unit,Storage unit,Yes,[STORAGE],Conditional,No,area_exponent,float,single,functional storage,Functional curve
@@ -347,3 +347,21 @@ climate,Adjustments,Yes,[ADJUSTMENTS],No,No,monthly_adjustments,float,table,opti
 event,Event periods,Yes,event options,No,No,start,datetime,sequence/table,optional,Event analysis
 event,Event periods,Yes,event options,No,No,end,datetime,sequence/table,optional,Event analysis
 event,Event periods,Yes,event options,No,No,enabled,bool,sequence/table,optional,Event analysis
+lid_drain_mat,LID drainage mat layer,Yes,[LID_CONTROLS],Conditional,No,thickness,float,table,green roof,Length
+lid_drain_mat,LID drainage mat layer,Yes,[LID_CONTROLS],Conditional,No,void_ratio,float,table,green roof,Ratio
+lid_drain_mat,LID drainage mat layer,Yes,[LID_CONTROLS],Conditional,No,roughness,float,table,green roof,Manning n
+lid_pavement,LID pavement layer,Yes,[LID_CONTROLS],No,No,regeneration_interval,float,table,porous pavement,Time
+lid_pavement,LID pavement layer,Yes,[LID_CONTROLS],No,No,regeneration_fraction,float,table,porous pavement,Fraction
+lid_storage,LID storage layer,Yes,[LID_CONTROLS],No,No,covered,float,table,storage layer,Fraction/flag
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,area,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,surcharge_depth,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,suction_head,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,hydraulic_conductivity,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,initial_moisture_deficit,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[STORAGE],No,No,seepage_loss,float,single,0/optional,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[COORDINATES],No,Yes,x,float,single,required,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[COORDINATES],No,Yes,y,float,single,required,Implemented; see example 22 for relation-specific rules
+storage_unit,Storage Unit,Yes,[TAGS],No,No,tag,str,single,0/optional,Implemented; see example 22 for relation-specific rules
+flow_divider,Flow Divider,Yes,[COORDINATES],No,Yes,x,float,single,required,Implemented; see example 22 for relation-specific rules
+flow_divider,Flow Divider,Yes,[COORDINATES],No,Yes,y,float,single,required,Implemented; see example 22 for relation-specific rules
+flow_divider,Flow Divider,Yes,[TAGS],No,No,tag,str,single,0/optional,Implemented; see example 22 for relation-specific rules

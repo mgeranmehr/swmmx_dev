@@ -1,4 +1,4 @@
-﻿Main category,Subcategory / parameter group,Source,Type,Size / structure,Coding notes / conditions
+Main category,Subcategory / parameter group,Source,Type,Size / structure,Coding notes / conditions
 option_general,flow_units,user,enum,single,"CFS, GPM, MGD, CMS, LPS, MLD"
 option_general,infiltration_model,user,enum,single,"Horton, Modified Horton, Green-Ampt, Modified Green-Ampt, Curve Number"
 option_general,flow_routing,user,enum,single,"Steady, Kinematic Wave, Dynamic Wave"
@@ -63,6 +63,7 @@ subcatchment,snow_pack,ref,str,single/series by ID,Optional snow pack reference
 subcatchment,tag,user,str,single/series by ID,Optional metadata
 subcatchment,polygon,user,coordinates,sequence/list,Map polygon
 subcatchment,centroid,user/derived,coordinates,single/list,Map coordinate
+subcatchment,lid_controls,user,table/dict,series/table,LID Usage Editor rows assigned to each subcatchment; use m.set.subcatchment.lid_controls.add/remove/clear
 subcatchment,rainfall,result,float,time series,After run
 subcatchment,snow_depth,result,float,time series,Snow enabled
 subcatchment,evaporation,result,float,time series,Evaporation active
@@ -136,7 +137,7 @@ flow_divider,surcharge_depth,user,float,series by ID,Length
 flow_divider,ponded_area,user,float,series by ID,Area
 flow_divider,type,user,enum,series by ID,"Cutoff, overflow, tabular, weir"
 flow_divider,diverted_link,ref,str,series by ID,Link reference
-flow_divider,cutoff_flow,user,float,series by ID,Flow; cutoff divider
+flow_divider,cutoff_flow,user,float,series by ID,Minimum diversion flow for CUTOFF and WEIR
 flow_divider,diversion_curve,ref,str,series by ID,Curve reference
 flow_divider,weir_height,user,float,series by ID,Length
 flow_divider,weir_coefficient,user,float,series by ID,Coefficient
@@ -145,14 +146,14 @@ storage_unit,count,derived,integer,single,Number of storage units
 storage_unit,invert_elevation,user,float,series by ID,Elevation
 storage_unit,max_depth,user,float,series by ID,Length
 storage_unit,initial_depth,user,float,series by ID,Length
-storage_unit,storage_curve_type,user,enum,series by ID,Functional or tabular
+storage_unit,storage_curve_type,user,enum,series by ID,FUNCTIONAL/TABULAR/CYLINDRICAL/CONICAL/PARABOLIC/PYRAMIDAL
 storage_unit,storage_curve,ref,str,series by ID,Curve reference if tabular
-storage_unit,area,user,float,series by ID,Area; functional storage
+storage_unit,area,user,float,series by ID,Alias for area_constant in FUNCTIONAL storage
 storage_unit,area_coefficient,user,float,series by ID,Functional storage
 storage_unit,area_exponent,user,float,series by ID,Functional storage
 storage_unit,area_constant,user,float,series by ID,Functional storage
 storage_unit,evaporation_factor,user,float,series by ID,Multiplier
-storage_unit,seepage_loss,user,float/table,series/table,Optional
+storage_unit,seepage_loss,user,float/table,series/table,"Getter returns Ksat; setter accepts Ksat or (Psi, Ksat, IMD) or a named mapping"
 link,id,user,str,single,Generic link ID
 link,count,derived,integer,single,Number of all links
 link,type,derived,enum,series by ID,Conduit/pump/orifice/weir/outlet
@@ -357,6 +358,8 @@ lid_usage,area,user,float,series/table,Area
 lid_usage,width,user,float,series/table,Length
 lid_usage,initial_saturation,user,float,series/table,Percent/fraction
 lid_usage,from_impervious_percent,user,float,series/table,Percent
+lid_usage,return_flow_to_pervious,user,bool,series/table,Return LID surface outflow to the subcatchment pervious area
+lid_usage,report_file,user,str,series/table,Optional detailed LID report file path
 lid_usage,from_pervious_percent,user,float,series/table,Percent
 lid_usage,outlet,ref,str,series/table,Optional outlet
 lid_usage,drain_to,ref,str,series/table,Optional drain target
@@ -561,3 +564,33 @@ summary,runoff_continuity,result,table/dict,single/table,Runoff active
 summary,flow_routing_continuity,result,table/dict,single/table,Routing active
 summary,quality_routing_continuity,result,table/dict,single/table,Quality enabled
 summary,validation_issues,derived,table,table,Toolkit validation output
+lid_drain_mat,thickness,user,float,series/table,Drainage mat thickness
+lid_drain_mat,void_ratio,user,float,series/table,Drainage mat void ratio
+lid_drain_mat,roughness,user,float,series/table,Drainage mat roughness
+lid_pavement,regeneration_interval,user,float,series/table,Permeability regeneration interval
+lid_pavement,regeneration_fraction,user,float,series/table,Permeability regeneration fraction
+lid_storage,covered,user,float,series/table,Storage layer initially covered fraction/flag
+lid_usage,area_percent,derived,float,series/table,Derived percent of subcatchment occupied by this LID usage
+lid_usage,occupies_full_subcatchment,derived,bool,series/table,Derived flag when the usage area covers the full subcatchment
+storage_unit,x,user,float,series by ID,Node metadata persisted in COORDINATES/TAGS
+storage_unit,y,user,float,series by ID,Node metadata persisted in COORDINATES/TAGS
+storage_unit,tag,user,str,series by ID,Node metadata persisted in COORDINATES/TAGS
+storage_unit,depth,result,float,time series by ID,Native node output
+storage_unit,head,result,float,time series by ID,Native node output
+storage_unit,volume,result,float,time series by ID,Native node output
+storage_unit,lateral_inflow,result,float,time series by ID,Native node output
+storage_unit,total_inflow,result,float,time series by ID,Native node output
+storage_unit,flooding,result,float,time series by ID,Native node output
+flow_divider,x,user,float,series by ID,Node metadata persisted in COORDINATES/TAGS
+flow_divider,y,user,float,series by ID,Node metadata persisted in COORDINATES/TAGS
+flow_divider,tag,user,str,series by ID,Node metadata persisted in COORDINATES/TAGS
+flow_divider,depth,result,float,time series by ID,Native node output
+flow_divider,head,result,float,time series by ID,Native node output
+flow_divider,volume,result,float,time series by ID,Native node output
+flow_divider,lateral_inflow,result,float,time series by ID,Native node output
+flow_divider,total_inflow,result,float,time series by ID,Native node output
+flow_divider,flooding,result,float,time series by ID,Native node output
+storage_unit,surcharge_depth,user,float,series by ID,EPA SWMM storage input
+storage_unit,suction_head,user,float,series by ID,EPA SWMM storage input
+storage_unit,hydraulic_conductivity,user,float,series by ID,EPA SWMM storage input
+storage_unit,initial_moisture_deficit,user,float,series by ID,EPA SWMM storage input

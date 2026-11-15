@@ -302,7 +302,9 @@ def test_import_result_helpers_and_collect_errors(tmp_path):
     assert "failed" in result.summary() or "skipped=1" in result.summary()
 
 
-def test_import_gis_missing_dependency_is_clear(tmp_path):
+def test_import_gis_missing_dependency_is_clear(tmp_path, monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "geopandas", None)
     model = swmm(new="SI")
     with pytest.raises(SwmmxImportDependencyError, match="GIS import requires geopandas and shapely"):
         model.import_gis.node.junction(tmp_path / "junctions.geojson")

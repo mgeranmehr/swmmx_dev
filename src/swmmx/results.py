@@ -163,6 +163,32 @@ class OutputFile:
 
         return 8 + self.header.pollutants
 
+    def object_ids(self, object_kind: str) -> list[str]:
+        """Return IDs in the binary output's actual column order.
+
+        SWMM assigns indexes in input order, which need not match the public
+        category union order. REPORT selections can also omit objects.
+        """
+        if not hasattr(self, "_object_ids"):
+            position = self.summary.id_start_position
+            groups = {}
+            for kind, count in (("subcatchment", self.header.subcatchments),
+                                ("node", self.header.nodes), ("link", self.header.links),
+                                ("pollutant", self.header.pollutants)):
+                names = []
+                for _ in range(count):
+                    if position < 0 or position + 4 > self.summary.input_start_position:
+                        raise ValueError(f"Invalid ID block in '{self.path}'.")
+                    length = struct.unpack_from("<i", self._data, position)[0]
+                    position += 4
+                    if length < 0 or position + length > self.summary.input_start_position:
+                        raise ValueError(f"Invalid ID length in '{self.path}'.")
+                    names.append(self._data[position:position + length].decode("utf-8", errors="replace"))
+                    position += length
+                groups[kind] = names
+            self._object_ids = groups
+        return list(self._object_ids[object_kind])
+
     @property
     def node_result_count(self) -> int:
         """Return float count per node in each period record."""

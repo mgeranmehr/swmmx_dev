@@ -11,3 +11,4 @@ dist/
 *.int
 examples/output/*
 !examples/output/.gitkeep
+.ruff_cache/

@@ -390,6 +390,13 @@ def _simple_frame(model: "SWMMModel", element: str) -> pd.DataFrame:
     """Return one ordinary direct-section export table."""
 
     section, columns = SIMPLE_SECTIONS[element]
+    if element in {"storage_units", "dividers"}:
+        from ..node_fields import node_record
+        category = "storage_unit" if element == "storage_units" else "flow_divider"
+        records = [node_record(category, row) for row in model._document.rows(section)]
+        for record in records:
+            record["tag"] = model._tag_for("Node", record["id"])
+        return pd.DataFrame(records) if records else pd.DataFrame(columns=["id"])
     return _rows_to_frame(model._document.rows(section), columns)
 
 

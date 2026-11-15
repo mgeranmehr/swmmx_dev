@@ -746,3 +746,20 @@ def test_plot_profile_no_path_raises():
 
     with pytest.raises(NoPathError, match="No path was found from node 'Outlet' to node 'P011'"):
         model.plot_profile.nodes("Outlet", "P011", show=False)
+
+
+
+def test_plot_layout_annotation_lid_usage_area_percent():
+    model = swmm(EXAMPLE)
+    # CA-1 exists in the example model; area_percent is derived from number * area
+    # relative to the subcatchment area and must be available to annotation templates.
+    model._document.append_row("LID_USAGE", ["CA-1", "BR", 1, 100.0, 5.0, 0.0, 25.0, 0, "*", "*", 0.0])
+
+    fig, ax = model.plot_layout(
+        annotation={"lid_usages": {"template": "{lid_control}\n{area_percent:.1f}%", "bbox": True}},
+        show=False,
+    )
+
+    texts = _annotation_texts(ax)
+    assert any(text.startswith("BR\n") and text.endswith("%") for text in texts)
+    _close(fig)

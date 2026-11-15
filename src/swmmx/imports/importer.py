@@ -289,6 +289,11 @@ def _execute_group_import(
             element_type = _normalize_type(raw_type or fallback, schema)
             concrete = schema_for(schema.category, element_type)
             filtered = {key: value for key, value in values.items() if key in concrete.fields}
+            # Union exports distinguish element_type from the hydraulic type.
+            if schema.category == "node" and element_type in {"flow_divider", "outfall"}:
+                for column in df.columns:
+                    if normalize_field_name(column) == "type" and column != matches.get("type") and not _is_missing(row[column]):
+                        filtered["type"] = _coerce_scalar(row[column])
             _process_single_row(
                 model,
                 schema=concrete,
@@ -405,9 +410,7 @@ def _add_element(model: "SWMMModel", schema: ImportSchema, object_id: str, optio
 
     options = _adapt_exported_options(model, schema, object_id, dict(options))
     tag = options.pop("tag", None)
-    if schema.category == "node" and schema.element_type in {"flow_divider", "storage_unit"}:
-        _add_direct_node(model, schema, object_id, options)
-    elif schema.category == "link" and schema.element_type != "conduit":
+    if schema.category == "link" and schema.element_type != "conduit":
         _add_direct_link(model, schema, object_id, options)
     else:
         try:
@@ -494,55 +497,6 @@ def _points_close(first: Any, second: Any, *, tolerance: float = 1e-9) -> bool:
         )
     except (TypeError, ValueError, IndexError):
         return False
-
-
-def _add_direct_node(model: "SWMMModel", schema: ImportSchema, object_id: str, options: dict[str, Any]) -> None:
-    """Add currently-reserved node types directly to INP rows."""
-
-    _assert_unique(model, "node", object_id)
-    x = options.pop("x")
-    y = options.pop("y")
-    if schema.element_type == "flow_divider":
-        row = [
-            object_id,
-            options.pop("invert_elevation", 0.0),
-            options.pop("max_depth", 0.0),
-            options.pop("initial_depth", 0.0),
-            options.pop("surcharge_depth", 0.0),
-            options.pop("ponded_area", 0.0),
-            str(options.pop("type", "CUTOFF")).upper(),
-            options.pop("diverted_link", None),
-            options.pop("cutoff_flow", None),
-            options.pop("diversion_curve", None),
-            options.pop("weir_height", None),
-            options.pop("weir_coefficient", None),
-        ]
-        section = "DIVIDERS"
-    else:
-        area_value = options.pop("area", None)
-        if area_value is None:
-            area_value = options.pop("area_coefficient", 0.0)
-        else:
-            options.pop("area_coefficient", None)
-        row = [
-            object_id,
-            options.pop("invert_elevation", 0.0),
-            options.pop("max_depth", 0.0),
-            options.pop("initial_depth", 0.0),
-            str(options.pop("storage_curve_type", "FUNCTIONAL")).upper(),
-            options.pop("storage_curve", None),
-            area_value,
-            options.pop("area_exponent", 0.0),
-            options.pop("area_constant", 0.0),
-            options.pop("evaporation_factor", 0.0),
-            options.pop("seepage_loss", 0.0),
-        ]
-        section = "STORAGE"
-    _reject_unknown(options, schema)
-    model._document.append_row(section, row)
-    model._document.append_row("COORDINATES", [object_id, x, y])
-    model._dirty = True
-    model._invalidate_results()
 
 
 def _add_direct_link(model: "SWMMModel", schema: ImportSchema, object_id: str, options: dict[str, Any]) -> None:

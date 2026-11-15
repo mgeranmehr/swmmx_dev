@@ -18,9 +18,12 @@ from .export import ExportAccessor
 from .imports import ImportRoot
 from .errors import (
     FormatError,
+    InvalidParameterError,
     InvalidReferenceError,
+    MissingRequiredParameterError,
     ModelNotRunError,
     NotImplementedYetError,
+    ObjectNotFoundError,
     ReadOnlyParameterError,
     SaveError,
 )
@@ -48,6 +51,37 @@ from .validation import FLOW_UNITS_SI, FLOW_UNITS_US, validate_document
 
 
 _MISSING = object()
+
+
+LID_USAGE_FIELDS = (
+    "subcatchment",
+    "lid_control",
+    "number",
+    "area",
+    "width",
+    "initial_saturation",
+    "from_impervious_percent",
+    "return_flow_to_pervious",
+    "report_file",
+    "drain_to",
+    "from_pervious_percent",
+)
+
+LID_USAGE_ALIAS_MAP = {
+    "lid_control": ("lid_control", "control", "control_name", "lid"),
+    "number": ("number", "count", "units", "number_of_units"),
+    "area": ("area", "unit_area", "area_of_each_unit"),
+    "area_percent": ("area_percent", "percent_area", "subcatchment_area_percent", "percent_of_area"),
+    "occupies_full_subcatchment": ("occupies_full_subcatchment", "full_subcatchment", "lid_occupies_full_subcatchment"),
+    "width": ("width", "surface_width", "surface_width_per_unit"),
+    "initial_saturation": ("initial_saturation", "init_saturation", "initially_saturated", "initial_saturation_percent"),
+    "from_impervious_percent": ("from_impervious_percent", "impervious_treated_percent", "percent_impervious_treated", "from_impervious"),
+    "from_pervious_percent": ("from_pervious_percent", "pervious_treated_percent", "percent_pervious_treated", "from_pervious"),
+    "return_flow_to_pervious": ("return_flow_to_pervious", "out_to_pervious", "to_pervious", "to_perv", "return_outflow_to_pervious", "outlet"),
+    "report_file": ("report_file", "detailed_report_file", "lid_report_file", "file"),
+    "drain_to": ("drain_to", "send_drain_flow_to", "drain_target", "drain_outlet"),
+    "replace": ("replace", "overwrite"),
+}
 
 
 class OptionView(MutableMapping[str, str]):
@@ -210,7 +244,7 @@ class SWMMModel:
             return self._control_rule_ids()
         if category == "transect":
             return self._transect_ids()
-        if category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain"}:
+        if category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain", "lid_drain_mat"}:
             return self._lid_layer_ids(category)
         # Aggregate sections in SWMM's ordinary object-group order for composite
         # categories such as ``node`` and ``link``.
@@ -243,6 +277,7 @@ class SWMMModel:
             "lid_soil": "SOIL",
             "lid_storage": "STORAGE",
             "lid_drain": "DRAIN",
+            "lid_drain_mat": "DRAINMAT",
         }
         wanted = layer_names[category]
         return [
@@ -497,6 +532,8 @@ class SWMMModel:
     def _get_special_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Handle richer public parameters that are not one flat input column."""
 
+        if spec.main_category in {"storage_unit", "flow_divider"} and spec.is_writable:
+            return self._get_variable_node_parameter(spec, ids=ids, format=format)
         if spec.main_category == "node":
             return self._get_node_parameter(spec, ids=ids, format=format)
         if spec.main_category == "link":
@@ -509,6 +546,8 @@ class SWMMModel:
             "route_to",
         }:
             return self._get_outfall_parameter(spec, ids=ids, format=format)
+        if spec.key == ("subcatchment", "lid_controls"):
+            return self._get_subcatchment_lid_controls(ids=ids, format=format)
         if spec.key == ("subcatchment", "polygon"):
             return self._get_points_parameter("POLYGONS", "subcatchment", ids=ids, format=format)
         if spec.key == ("subcatchment", "centroid"):
@@ -539,7 +578,9 @@ class SWMMModel:
             return self._get_transect_parameter(spec, ids=ids, format=format)
         if spec.main_category == "snow_pack":
             return self._get_snow_pack_parameter(spec, ids=ids, format=format)
-        if spec.main_category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain"}:
+        if spec.main_category == "lid_control" and spec.sub_category in {"id", "type"}:
+            return self._get_lid_control_parameter(spec, ids=ids, format=format)
+        if spec.main_category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain", "lid_drain_mat"}:
             return self._get_lid_layer_parameter(spec, ids=ids, format=format)
         if spec.main_category == "summary":
             return self._get_summary_parameter(spec, format=format)
@@ -548,6 +589,9 @@ class SWMMModel:
     def _set_special_parameter(self, spec: ParameterSpec, *, value, ids=None) -> bool:
         """Write richer public parameters that are not one flat input column."""
 
+        if spec.main_category in {"storage_unit", "flow_divider"}:
+            self._set_variable_node_parameter(spec, value=value, ids=ids)
+            return True
         if spec.main_category == "node":
             self._set_node_parameter(spec, value=value, ids=ids)
             return True
@@ -562,6 +606,9 @@ class SWMMModel:
             "route_to",
         }:
             self._set_overlay_parameter(spec, value=value, ids=ids)
+            return True
+        if spec.key == ("subcatchment", "lid_controls"):
+            self._set_subcatchment_lid_controls(value=value, ids=ids)
             return True
         if spec.key == ("subcatchment", "polygon"):
             self._set_points_parameter("POLYGONS", "subcatchment", value=value, ids=ids)
@@ -605,7 +652,7 @@ class SWMMModel:
         if spec.main_category == "snow_pack":
             self._set_snow_pack_parameter(spec, value=value, ids=ids)
             return True
-        if spec.main_category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain"}:
+        if spec.main_category in {"lid_surface", "lid_pavement", "lid_soil", "lid_storage", "lid_drain", "lid_drain_mat"}:
             # Flat LID layer fields are already handled through direct routes;
             # this branch exists only for the few advanced layer attributes that
             # may be stored as overrides when SWMM omits them.
@@ -617,6 +664,282 @@ class SWMMModel:
                 return True
             raise ReadOnlyParameterError(f"'{spec.path}' is a derived parameter and cannot be set.")
         return False
+
+    def _get_subcatchment_lid_controls(self, *, ids=None, format=None):
+        """Return LID Usage Editor rows grouped by subcatchment."""
+
+        available_ids = self._ids_for_category("subcatchment")
+        selected_ids, explicit_single = normalize_ids(ids, available_ids, "subcatchment")
+        grouped = {subcatchment_id: [] for subcatchment_id in selected_ids}
+        selected = set(selected_ids)
+        for row in self._document.rows("LID_USAGE"):
+            if len(row) >= 2 and str(row[0]) in selected:
+                grouped[str(row[0])].append(self._lid_usage_record(row))
+        if format == "df":
+            records = [record for subcatchment_id in selected_ids for record in grouped[subcatchment_id]]
+            return pd.DataFrame(records, columns=[*LID_USAGE_FIELDS, "area_percent", "occupies_full_subcatchment"])
+        if format not in {None, "np"}:
+            raise FormatError("Unsupported format for subcatchment.lid_controls. Use None, 'np', or 'df'.")
+        if explicit_single:
+            return grouped[selected_ids[0]]
+        return grouped
+
+    def _set_subcatchment_lid_controls(self, *, value, ids=None) -> None:
+        """Replace all LID usage assignments for one or more subcatchments."""
+
+        if ids is None:
+            if not isinstance(value, dict):
+                raise InvalidParameterError(
+                    "Set subcatchment.lid_controls with ids='S1' and a list of usage dictionaries, "
+                    "or pass a dictionary mapping subcatchment IDs to usage dictionaries."
+                )
+            items = [(str(subcatchment_id), usage_rows) for subcatchment_id, usage_rows in value.items()]
+        else:
+            available_ids = self._ids_for_category("subcatchment")
+            selected_ids, explicit_single = normalize_ids(ids, available_ids, "subcatchment")
+            if explicit_single:
+                items = [(selected_ids[0], value)]
+            else:
+                rows = list(value)
+                if len(rows) != len(selected_ids):
+                    raise InvalidParameterError("When ids is a list, value must contain one LID-control list per subcatchment ID.")
+                items = list(zip(selected_ids, rows))
+        for subcatchment_id, usage_rows in items:
+            self._assert_subcatchment_exists(subcatchment_id)
+            self._remove_lid_usage_rows(lambda row, sid=subcatchment_id: len(row) >= 1 and str(row[0]) == sid)
+            if usage_rows is None or usage_rows == "":
+                continue
+            if isinstance(usage_rows, dict):
+                usage_iterable = [usage_rows]
+            else:
+                usage_iterable = list(usage_rows)
+            for usage in usage_iterable:
+                if not isinstance(usage, dict):
+                    raise InvalidParameterError("Each subcatchment LID usage must be a dictionary.")
+                usage = dict(usage)
+                lid_control = self._extract_lid_usage_option(usage, "lid_control")
+                if lid_control is None:
+                    raise MissingRequiredParameterError("Each subcatchment LID usage requires 'lid_control'.")
+                self._add_subcatchment_lid_control(subcatchment_id, str(lid_control), replace=True, **usage)
+
+    def _add_subcatchment_lid_control(self, subcatchment: str, lid_control: str, **options):
+        """Add one LID Usage Editor assignment to a subcatchment."""
+
+        subcatchment_id = str(subcatchment).strip()
+        lid_control_id = str(lid_control).strip()
+        self._assert_subcatchment_exists(subcatchment_id)
+        self._assert_lid_control_exists(lid_control_id)
+        values = self._normalize_lid_usage_options(dict(options))
+        replace = bool(values.pop("replace", False))
+        area_sq = self._subcatchment_area_square_units(subcatchment_id)
+        number = self._nonnegative_float(values.pop("number", 1), "number")
+        if number <= 0:
+            raise InvalidParameterError("LID usage 'number' must be greater than zero.")
+        occupies_full = bool(values.pop("occupies_full_subcatchment", False))
+        area = values.pop("area", None)
+        area_percent = values.pop("area_percent", None)
+        if occupies_full:
+            area = area_sq / number
+        elif area is None and area_percent is not None:
+            percent = self._percent(area_percent, "area_percent")
+            area = area_sq * percent / 100.0 / number
+        elif area is None:
+            raise MissingRequiredParameterError(
+                "Adding subcatchment LID controls requires one sizing option: area=..., area_percent=..., "
+                "or occupies_full_subcatchment=True."
+            )
+        area = self._nonnegative_float(area, "area")
+        width = values.pop("width", None)
+        if width is None:
+            width = area ** 0.5 if area > 0 else 0.0
+        width = self._nonnegative_float(width, "width")
+        initial_saturation = self._percent(values.pop("initial_saturation", 0), "initial_saturation")
+        from_impervious = self._percent(values.pop("from_impervious_percent", 0), "from_impervious_percent")
+        from_pervious = self._percent(values.pop("from_pervious_percent", 0), "from_pervious_percent")
+        return_to_perv = self._lid_yes_no(values.pop("return_flow_to_pervious", False))
+        report_file = self._lid_optional_token(values.pop("report_file", None))
+        drain_to = self._lid_optional_token(values.pop("drain_to", None))
+        if drain_to != "*":
+            known = set(self._ids_for_category("node")) | set(self._ids_for_category("subcatchment"))
+            if drain_to not in known:
+                raise InvalidReferenceError(f"Cannot add LID usage for subcatchment '{subcatchment_id}': drain_to '{drain_to}' does not exist.")
+        if values:
+            unknown = ", ".join(sorted(values))
+            raise InvalidParameterError(f"Unknown LID usage option(s): {unknown}.")
+        existing_duplicate = any(len(row) >= 2 and str(row[0]) == subcatchment_id and str(row[1]) == lid_control_id for row in self._document.rows("LID_USAGE"))
+        if existing_duplicate and not replace:
+            raise InvalidParameterError(
+                f"Subcatchment '{subcatchment_id}' already uses LID control '{lid_control_id}'. "
+                "Pass replace=True or remove it first."
+            )
+        if replace:
+            self._remove_lid_usage_rows(lambda row: len(row) >= 2 and str(row[0]) == subcatchment_id and str(row[1]) == lid_control_id)
+        row = [subcatchment_id, lid_control_id, self._nice_number(number), self._nice_number(area), self._nice_number(width), self._nice_number(initial_saturation), self._nice_number(from_impervious), return_to_perv, report_file, drain_to, self._nice_number(from_pervious)]
+        self._validate_lid_usage_group_limits(subcatchment_id, candidate=row)
+        self._document.append_row("LID_USAGE", row)
+        self._dirty = True
+        self._invalidate_results()
+        return self._lid_usage_record(row)
+
+    def _remove_subcatchment_lid_control(self, subcatchment: str, lid_control: str | None = None):
+        """Remove one or all LID controls assigned to a subcatchment."""
+
+        subcatchment_id = str(subcatchment).strip()
+        self._assert_subcatchment_exists(subcatchment_id)
+        if lid_control is None:
+            return self._clear_subcatchment_lid_controls(subcatchment_id)
+        lid_control_id = str(lid_control).strip()
+        removed = self._remove_lid_usage_rows(lambda row: len(row) >= 2 and str(row[0]) == subcatchment_id and str(row[1]) == lid_control_id)
+        if not removed:
+            raise ObjectNotFoundError(f"Subcatchment '{subcatchment_id}' does not use LID control '{lid_control_id}'.")
+        self._dirty = True
+        self._invalidate_results()
+        return {"removed": [self._lid_usage_record(row) for row in removed], "warnings": []}
+
+    def _clear_subcatchment_lid_controls(self, subcatchment: str):
+        """Remove every LID Usage row for one subcatchment."""
+
+        subcatchment_id = str(subcatchment).strip()
+        self._assert_subcatchment_exists(subcatchment_id)
+        removed = self._remove_lid_usage_rows(lambda row: len(row) >= 1 and str(row[0]) == subcatchment_id)
+        if removed:
+            self._dirty = True
+            self._invalidate_results()
+        return {"removed": [self._lid_usage_record(row) for row in removed], "warnings": []}
+
+    def _normalize_lid_usage_options(self, options: dict) -> dict:
+        normalized = {}
+        for key, value in options.items():
+            canonical = None
+            normalized_key = str(key).strip().lower().replace("-", "_").replace(" ", "_")
+            for target, aliases in LID_USAGE_ALIAS_MAP.items():
+                if normalized_key in aliases:
+                    canonical = target
+                    break
+            if canonical is None:
+                normalized[normalized_key] = value
+            else:
+                normalized[canonical] = value
+        return normalized
+
+    def _extract_lid_usage_option(self, options: dict, name: str):
+        for alias in LID_USAGE_ALIAS_MAP[name]:
+            if alias in options:
+                return options.pop(alias)
+        return None
+
+    def _lid_usage_record(self, row) -> dict:
+        padded = list(row) + [""] * max(0, len(LID_USAGE_FIELDS) - len(row))
+        record = {field: padded[index] for index, field in enumerate(LID_USAGE_FIELDS)}
+        record["number"] = self._coerce_optional_number(record["number"])
+        record["area"] = self._coerce_optional_number(record["area"])
+        record["width"] = self._coerce_optional_number(record["width"])
+        record["initial_saturation"] = self._coerce_optional_number(record["initial_saturation"])
+        record["from_impervious_percent"] = self._coerce_optional_number(record["from_impervious_percent"])
+        record["from_pervious_percent"] = self._coerce_optional_number(record["from_pervious_percent"])
+        record["return_flow_to_pervious"] = self._coerce_lid_bool(record["return_flow_to_pervious"])
+        for optional in ("report_file", "drain_to"):
+            if record[optional] in {None, "", "*"}:
+                record[optional] = None
+        record["area_percent"] = self._lid_usage_area_percent(record)
+        percent = record["area_percent"]
+        record["occupies_full_subcatchment"] = percent is not None and abs(float(percent) - 100.0) <= 1e-6
+        return record
+
+    def _validate_lid_usage_group_limits(self, subcatchment: str, *, candidate=None) -> None:
+        rows = [row for row in self._document.rows("LID_USAGE") if len(row) >= 1 and str(row[0]) == subcatchment]
+        if candidate is not None:
+            rows.append(candidate)
+        area_total = 0.0
+        impervious_total = 0.0
+        pervious_total = 0.0
+        for row in rows:
+            record = self._lid_usage_record(row)
+            area_total += float(record.get("area_percent") or 0.0)
+            impervious_total += float(record.get("from_impervious_percent") or 0.0)
+            pervious_total += float(record.get("from_pervious_percent") or 0.0)
+        if area_total > 100.000001:
+            raise InvalidParameterError(f"LID usage in subcatchment '{subcatchment}' covers {area_total:.3g}% of the subcatchment; the LID Group Editor limit is 100%.")
+        if impervious_total > 100.000001:
+            raise InvalidParameterError(f"LID usage in subcatchment '{subcatchment}' treats {impervious_total:.3g}% impervious area; the LID Group Editor limit is 100%.")
+        if pervious_total > 100.000001:
+            raise InvalidParameterError(f"LID usage in subcatchment '{subcatchment}' treats {pervious_total:.3g}% pervious area; the LID Group Editor limit is 100%.")
+
+    def _lid_usage_area_percent(self, record: dict):
+        total_area = self._subcatchment_area_square_units(str(record.get("subcatchment")))
+        if total_area <= 0:
+            return None
+        number = float(record.get("number") or 0.0)
+        area = float(record.get("area") or 0.0)
+        return number * area / total_area * 100.0
+
+    def _subcatchment_area_square_units(self, subcatchment: str) -> float:
+        for row in self._document.rows("SUBCATCHMENTS"):
+            if len(row) >= 4 and str(row[0]) == str(subcatchment):
+                area = float(self._coerce_optional_number(row[3]) or 0.0)
+                flow_units = str(self._document.get_option("FLOW_UNITS", "CFS")).upper()
+                return area * (10000.0 if flow_units in FLOW_UNITS_SI else 43560.0)
+        return 0.0
+
+    def _assert_subcatchment_exists(self, subcatchment: str) -> None:
+        if subcatchment not in self._ids_for_category("subcatchment"):
+            raise ObjectNotFoundError(f"Unknown subcatchment ID '{subcatchment}'.")
+
+    def _assert_lid_control_exists(self, lid_control: str) -> None:
+        if lid_control not in self._ids_for_category("lid_control"):
+            raise ObjectNotFoundError(f"Unknown LID control ID '{lid_control}'.")
+
+    def _remove_lid_usage_rows(self, predicate):
+        return self._document.remove_matching_rows("LID_USAGE", predicate)
+
+    def _nonnegative_float(self, value, name: str) -> float:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            raise InvalidParameterError(f"LID usage '{name}' must be numeric.") from None
+        if number < 0:
+            raise InvalidParameterError(f"LID usage '{name}' must be non-negative.")
+        return number
+
+    def _percent(self, value, name: str) -> float:
+        number = self._nonnegative_float(value, name)
+        if number > 100:
+            raise InvalidParameterError(f"LID usage '{name}' must be between 0 and 100.")
+        return number
+
+    def _nice_number(self, value):
+        number = float(value)
+        return int(number) if number.is_integer() else number
+
+    def _lid_yes_no(self, value) -> int:
+        if isinstance(value, (bool, np.bool_)):
+            return 1 if bool(value) else 0
+        text = str(value).strip().upper()
+        if text in {"YES", "TRUE", "1"}:
+            return 1
+        if text in {"NO", "FALSE", "0", "", "*", "NONE"}:
+            return 0
+        raise InvalidParameterError("LID usage 'return_flow_to_pervious' must be YES/NO, True/False, or 1/0.")
+
+    def _coerce_lid_bool(self, value) -> bool:
+        if isinstance(value, (bool, np.bool_)):
+            return bool(value)
+        return str(value).strip().upper() in {"YES", "TRUE", "1"}
+
+    def _lid_optional_token(self, value) -> str:
+        if value is None:
+            return "*"
+        text = str(value).strip()
+        return text if text else "*"
+
+    def _coerce_optional_number(self, value):
+        if value in {None, "", "*"}:
+            return None
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return value
+        return int(number) if number.is_integer() else number
 
     def _get_derived_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Compute a derived parameter when this release knows how."""
@@ -704,8 +1027,11 @@ class SWMMModel:
 
         # ``conduit`` is a subset of SWMM's broader link result block, while
         # ``junction`` and ``outfall`` are subsets of the node result block.
-        result_ids = self._ids_for_category(object_kind)
+        result_ids = self._output_file_cache.object_ids(object_kind)
         selected_ids, explicit_single = normalize_ids(ids, self._ids_for_category(spec.main_category), spec.main_category)
+        missing = set(selected_ids) - set(result_ids)
+        if missing:
+            raise ObjectNotFoundError(f"No reported output for {object_kind} ID(s): {', '.join(sorted(missing))}.")
         column_indexes = [result_ids.index(object_id) for object_id in selected_ids]
         selected_matrix = whole_matrix[:, column_indexes]
         if spec.main_category == "pump" and spec.sub_category == "status":
@@ -888,7 +1214,7 @@ class SWMMModel:
         selected_ids, explicit_single = normalize_ids(ids, available_ids, spec.main_category)
         if not pollutant_ids:
             return self._fallback_result_parameter(spec, ids=ids, format=format)
-        result_ids = self._ids_for_category(object_kind)
+        result_ids = self._output_file_cache.object_ids(object_kind)
         matrices = [self._output_file_cache.matrix(object_kind, "pollutant_concentration", pollutant_index=index) for index, _ in enumerate(pollutant_ids)]
         column_indexes = [result_ids.index(object_id) for object_id in selected_ids]
         tensor = np.stack([matrix[:, column_indexes] for matrix in matrices], axis=-1)
@@ -935,6 +1261,98 @@ class SWMMModel:
                 self._document.set_field_values(section_name, field_index, {object_id: value})
                 return
 
+    def _get_variable_node_parameter(self, spec, *, ids=None, format=None):
+        from .node_fields import NODE_SECTIONS, node_record
+
+        category, name = spec.main_category, spec.sub_category
+        selected, single = normalize_ids(ids, self._ids_for_category(category), category)
+        rows = {row[0]: row for row in self._document.rows(NODE_SECTIONS[category])}
+        values = []
+        for object_id in selected:
+            if name == "tag":
+                item = self._tag_for("Node", object_id)
+            elif name in {"x", "y", "coordinate"}:
+                point = self._point_for("COORDINATES", object_id)
+                item = point if name == "coordinate" else (point[0 if name == "x" else 1] if point else None)
+            else:
+                item = node_record(category, rows[object_id]).get(name)
+            values.append(item)
+        return self._format_non_time_values(values, selected, single, format=format)
+
+    def _set_variable_node_parameter(self, spec, *, value, ids=None, invalidate=True):
+        from .node_fields import NODE_SECTIONS, build_node_row, read_node_row, number
+
+        category, name = spec.main_category, spec.sub_category
+        selected, _ = normalize_ids(ids, self._ids_for_category(category), category)
+        # A seepage triple is one value; ordinary lists retain per-ID broadcasting.
+        if (name == "seepage_loss" and (isinstance(value, (dict, tuple)) or
+                (isinstance(value, list) and len(selected) == 1 and len(value) == 3))) or (
+                name in {"type", "storage_curve_type"} and isinstance(value, dict)):
+            values = [value] * len(selected)
+        else:
+            values = normalize_values(value, len(selected), category)
+        section = NODE_SECTIONS[category]
+        rows = {row[0]: row for row in self._document.rows(section)}
+        updates = []
+        for object_id, item in zip(selected, values):
+            if name == "id":
+                if item != object_id:
+                    raise NotImplementedYetError("Renaming storage/divider IDs requires rewriting references; remove and recreate explicitly.")
+                continue
+            if name == "tag":
+                if item is not None and (not isinstance(item, str) or "\n" in item or "\r" in item):
+                    raise InvalidParameterError("tag must be a single-line string.")
+                updates.append((object_id, item))
+                continue
+            if name in {"x", "y", "coordinate"}:
+                point = self._point_for("COORDINATES", object_id) or (0.0, 0.0)
+                if name == "coordinate":
+                    if not isinstance(item, (list, tuple, np.ndarray)) or len(item) != 2:
+                        raise InvalidParameterError("coordinate must contain x and y.")
+                    point = item
+                else:
+                    point = (item, point[1]) if name == "x" else (point[0], item)
+                updates.append((object_id, tuple(number(axis, v, nonnegative=False) for axis, v in zip(("x", "y"), point))))
+                continue
+            options = read_node_row(category, rows[object_id])
+            options.pop("id")
+            if name in {"type", "storage_curve_type"}:
+                if isinstance(item, dict):
+                    from .node_fields import STORAGE_FUNCTION, DIVIDER_FIELDS
+                    if name not in item:
+                        raise MissingRequiredParameterError(f"A relation update requires '{name}' and its new parameters.")
+                    conditional = (set(STORAGE_FUNCTION) | {"storage_curve"}) if category == "storage_unit" else set().union(*DIVIDER_FIELDS.values())
+                    replacement = {key: value for key, value in options.items() if key not in conditional}
+                    replacement.update(item)
+                    updates.append((object_id, build_node_row(self._document, category, object_id, replacement)))
+                    continue
+                if str(item).upper() != options[name]:
+                    raise InvalidParameterError(f"Changing relation type requires a mapping with '{name}' and the new parameters, or a complete import update row.")
+            if name == "area":
+                options.pop("area_constant", None)
+            if name == "seepage_loss":
+                # Explicit seepage edits replace supplied components only.
+                keys = item.keys() if isinstance(item, dict) else (("suction_head", "hydraulic_conductivity", "initial_moisture_deficit") if isinstance(item, (tuple, list)) else ("hydraulic_conductivity",))
+                for key in keys:
+                    options.pop(key, None)
+            if item is None and name not in options:
+                continue  # Writing back an inapplicable getter is a no-op.
+            if item is None:
+                raise InvalidParameterError(f"{name} cannot be None for this node relation.")
+            options[name] = item
+            updates.append((object_id, build_node_row(self._document, category, object_id, options)))
+        # All selected values have passed validation before the first mutation.
+        for object_id, item in updates:
+            if name == "tag":
+                self._set_tag("Node", object_id, "" if item is None else item)
+            elif name in {"x", "y", "coordinate"}:
+                self._set_point("COORDINATES", object_id, item)
+            else:
+                self._document.replace_row(section, object_id, item)
+        if updates and invalidate:
+            self._dirty = True
+            self._invalidate_results()
+
     def _get_node_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Return union-node fields and node-attached related records."""
 
@@ -951,13 +1369,11 @@ class SWMMModel:
             "ponded_area": 5,
         }
         if spec.sub_category in direct_indexes:
-            values = [
-                coerce_value(
-                    self._field_value_from_sections(object_id, OBJECT_SECTIONS["node"], direct_indexes[spec.sub_category]),
-                    spec.type,
-                )
-                for object_id in selected_ids
-            ]
+            from .node_fields import NODE_SECTIONS, node_record
+            variable = {row[0]: node_record(category, row) for category, section in NODE_SECTIONS.items() for row in self._document.rows(section)}
+            values = [variable[object_id].get(spec.sub_category) if object_id in variable else coerce_value(
+                self._field_value_from_sections(object_id, OBJECT_SECTIONS["node"], direct_indexes[spec.sub_category]), spec.type)
+                for object_id in selected_ids]
             return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
         if spec.sub_category == "tag":
             values = [self._tag_for("Node", object_id) for object_id in selected_ids]
@@ -991,8 +1407,24 @@ class SWMMModel:
             "ponded_area": 5,
         }
         if spec.sub_category in direct_indexes:
-            for object_id, item in zip(selected_ids, selected_values):
-                self._set_field_in_sections(object_id, OBJECT_SECTIONS["node"], direct_indexes[spec.sub_category], self._render_set_value(item, spec))
+            from copy import deepcopy
+            from .node_fields import NODE_SECTIONS
+            original_document = self._document
+            original_dirty, original_stale = self._dirty, self._results_stale
+            variable = {object_id: category for category, section in NODE_SECTIONS.items() for object_id in self._document.section_ids(section)}
+            # Validate against an isolated document so bulk edits are atomic.
+            self._document = deepcopy(original_document)
+            try:
+                for object_id, item in zip(selected_ids, selected_values):
+                    if object_id in variable:
+                        child = ParameterSpec(variable[object_id], spec.sub_category, spec.source, spec.type, spec.size)
+                        self._set_variable_node_parameter(child, value=item, ids=object_id, invalidate=False)
+                    else:
+                        self._set_field_in_sections(object_id, OBJECT_SECTIONS["node"], direct_indexes[spec.sub_category], self._render_set_value(item, spec))
+            except Exception:
+                self._document = original_document
+                self._dirty, self._results_stale = original_dirty, original_stale
+                raise
         elif spec.sub_category == "tag":
             for object_id, item in zip(selected_ids, selected_values):
                 self._set_tag("Node", object_id, item)
@@ -1593,6 +2025,16 @@ class SWMMModel:
 
         self._set_overlay_parameter(spec, value=value, ids=ids)
 
+    def _get_lid_control_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
+        """Return LID control IDs or type rows without layer-row collisions."""
+
+        available_ids = self._ids_for_category("lid_control")
+        selected_ids, explicit_single = normalize_ids(ids, available_ids, "lid_control")
+        rows = {row[0]: row for row in self._document.rows("LID_CONTROLS") if len(row) >= 2 and row[1].upper() in {"BC", "RG", "GR", "IT", "PP", "RB", "RD", "VS"}}
+        index = 0 if spec.sub_category == "id" else 1
+        values = [rows[object_id][index] for object_id in selected_ids]
+        return self._format_non_time_values(values, selected_ids, explicit_single, format=format)
+
     def _get_lid_layer_parameter(self, spec: ParameterSpec, *, ids=None, format=None):
         """Return one filtered LID layer field."""
 
@@ -1607,6 +2049,7 @@ class SWMMModel:
             "lid_soil": "SOIL",
             "lid_storage": "STORAGE",
             "lid_drain": "DRAIN",
+            "lid_drain_mat": "DRAINMAT",
         }
         values = []
         for object_id in selected_ids:
@@ -1660,6 +2103,10 @@ class SWMMModel:
         """Save the current model to a valid EPA SWMM ``.inp`` file."""
 
         target = Path(inp_path).expanduser().resolve()
+
+        # Physical landcover is opt-in and lives outside the EPA input schema.
+        if getattr(self, "_landcover", None) is not None:
+            self._landcover.save(target.with_suffix(".swmmx.json"))
 
         # Creating parents is safe and convenient for normal save-as workflows.
         try:
@@ -1819,6 +2266,13 @@ class SWMMModel:
             key: values.copy()
             for key, values in self._parameter_overrides.items()
         }
+        if getattr(self, "_landcover", None) is not None:
+            from .landcover import LandCover
+            metadata = LandCover()
+            metadata._restore(self._landcover._state())
+            metadata._revision = self._landcover.revision
+            metadata.model = clone
+            clone._landcover = metadata
         return clone
 
     def add_element(self, category: str, element_type: str, id: str, **options):
@@ -1980,6 +2434,13 @@ class SWMMModel:
             "POLYGONS",
             "VERTICES",
             "LOSSES",
+            "LID_CONTROLS",
+            "LID_USAGE",
+            "LANDUSES",
+            "COVERAGES",
+            "STORAGE",
+            "DIVIDERS",
+            "TAGS",
         }
         key = name.upper()
         if key not in supported:

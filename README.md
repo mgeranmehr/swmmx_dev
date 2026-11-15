@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/pypi/l/swmmx.svg)](https://github.com/mgeranmehr/swmmx_dev/blob/main/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/swmmx.svg)](https://pypi.org/project/swmmx/)
 [![Python versions](https://img.shields.io/pypi/pyversions/swmmx.svg)](https://pypi.org/project/swmmx/)
-[![Build](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml/badge.svg)](https://github.com/mgeranmehr/swmmx_dev/actions/workflows/publish.yml)
 [![Downloads](https://img.shields.io/pypi/dm/swmmx.svg)](https://pypi.org/project/swmmx/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20312405.svg)](https://doi.org/10.5281/zenodo.20312405)
 
@@ -48,13 +47,14 @@ print(m.log())
 m.plot_timeseries.link.flow()
 ```
 
-Version `0.0.39` currently provides:
+Version `0.0.44` currently provides:
 
 - `swmm(path=None, new=None, flow_unit=None, custom_dll_path=None)`
 - `m.time.vector()`, `m.time.count()`, `m.time.vector_run()`, `m.time.count_run()`
 - structured parameter access through `m.get.<main_category>.<sub_category>()` and `m.set.<main_category>.<sub_category>()`
 - discoverable object counts through `m.count.<main_category>()`, `m.count.model()`, `m.count.model_dict()`, and `m.count.model_df()`
 - editable model construction through `m.add.<category>.<element_type>()` and `m.remove.<category>.<element_type>()`
+- complete storage-unit and flow-divider construction, validated parameter editing, coordinates/tags, native results, and CSV/Excel/GIS interchange
 - matplotlib plotting through `m.plot_layout()`, `m.plot_timeseries.<category>.<sub_category>()`, and `m.plot_profile.*`
 - tabular and spatial imports through `m.import_csv.<category>.<element_type>()` and `m.import_gis.<category>.<element_type>()`
 - external-format export through `m.export.gis()`, `m.export.csv()`, and `m.export.excel()`
@@ -70,6 +70,84 @@ m = swmm()                               # new SI model, LPS by default
 m = swmm(new="SI", flow_unit="CMS")      # new SI model
 m = swmm(new="US", flow_unit="GPM")      # new US model
 ```
+
+## Storage units and flow dividers
+
+Storage units and dividers are first-class nodes, with coordinates, tags,
+dependency-aware removal, layout annotations and native simulation results.
+Example [22 — Storage units and flow dividers](examples/22_storage_units_and_flow_dividers.ipynb)
+builds a two-pond network and compares all four divider rules. See also the
+[release notes](CHANGELOG.md).
+
+```python
+from swmmx import swmm
+
+m = swmm(new="SI", flow_unit="CMS")
+m.options["FLOW_ROUTING"] = "KINWAVE"
+m.add.node.storage_unit("Pond", x=0, y=0, invert_elevation=2,
+    max_depth=3, initial_depth=0.5, area=100, tag="Detention",
+    evaporation_factor=0.8, seepage_loss=(75, 1.5, 0.25))
+m.add.node.divider("Split", x=100, y=0, invert_elevation=1,
+    max_depth=3, type="CUTOFF", cutoff_flow=0.05)
+m.add.node.outfall("River", x=200, y=50, invert_elevation=0)
+m.add.node.outfall("BypassOut", x=200, y=-50, invert_elevation=0)
+m.add.link.conduit("Feed", from_node="Pond", to_node="Split", length=100)
+m.add.link.conduit("Normal", from_node="Split", to_node="River", length=100)
+m.add.link.conduit("Bypass", from_node="Split", to_node="BypassOut", length=100)
+m.set.flow_divider.diverted_link("Bypass", ids="Split")
+assert m.validate().ok
+m.save("detention.inp")
+result = m.run()
+assert result.success, m.log()
+depth = m.get.storage_unit.depth(ids="Pond")
+split_inflow = m.get.flow_divider.total_inflow(ids="Split")
+```
+
+- `FUNCTIONAL` storage uses `area_coefficient * depth ** area_exponent + area_constant`.
+  `area` aliases `area_constant`; both must agree if supplied together. Omitted
+  numeric geometry values default to zero. `TABULAR` requires `storage_curve`
+  pointing to an existing STORAGE curve and rejects functional fields.
+- `storage_curve_type` also accepts EPA 5.2 `CYLINDRICAL`, `CONICAL`, `PARABOLIC`
+  and `PYRAMIDAL`. The three `area_*` fields then carry EPA's length, width and
+  slope/height tokens. `PARABOLIC` uses top dimensions and top height; the other
+  shapes use base dimensions (the third token is unused for `CYLINDRICAL`).
+- `surcharge_depth`, `evaporation_factor`, `suction_head`, `hydraulic_conductivity`
+  and `initial_moisture_deficit` are persisted. `seepage_loss` accepts a Ksat
+  scalar, a `(Psi, Ksat, IMD)` tuple/list, or a dictionary using the three named
+  seepage fields. The getter returns Ksat; use the named getters for all three
+  components. SI infiltration units are mm and mm/hour; US units are inches and
+  inches/hour. Evaporation factor and moisture deficit are fractions from 0 to 1.
+- Divider types are `OVERFLOW` (default), `CUTOFF` (`cutoff_flow`), `TABULAR`
+  (`diversion_curve`, referencing a DIVERSION curve), and `WEIR` (`cutoff_flow`,
+  `weir_height`, `weir_coefficient`). `cutoff_flow` is the minimum diversion flow
+  for WEIR. Inapplicable fields raise `InvalidParameterError`.
+- Omit `diverted_link` or use `"*"` while constructing the network, then assign
+  the existing outgoing link. `validate()` reports an unassigned link as an
+  error. Named references must exist and leave that divider. Dividers operate
+  under Steady/Kinematic Wave routing; Dynamic Wave treats them as junctions.
+- `m.get.storage_unit.*` / `m.set.storage_unit.*` and
+  `m.get.flow_divider.*` / `m.set.flow_divider.*` expose input fields, `x`, `y`,
+  and `tag`; getters also expose `depth`, `head`, `volume`, `lateral_inflow`,
+  `total_inflow`, and `flooding`. Inapplicable getters return `None`. Successful
+  mutations mark results stale. Relation-type changes accept a mapping with the
+  type and its new parameters, for example
+  `m.set.flow_divider.type({"type": "CUTOFF", "cutoff_flow": 0.1}, ids="Split")` or
+  `m.set.storage_unit.storage_curve_type({"storage_curve_type": "TABULAR", "storage_curve": "AreaCurve"}, ids="Pond")`.
+  Common node fields are preserved and the whole edit is validated before writing.
+  A complete import update is also supported. Scalar type changes and ID renames
+  are guarded to prevent partial changes to dependent data.
+- `m.remove.node.storage_unit(ids, force=False)` and
+  `m.remove.node.divider(ids, force=False)` block link/subcatchment dependencies.
+  `force=True` only cascades safe conduits. Complex references and subcatchment
+  cascades raise `NotImplementedYetError` without changing the model.
+
+Use `m.export.csv(elements=["storage_units", "dividers"])` (or `.excel()` /
+`.gis()`) and `m.import_csv.node.storage_unit(...)` /
+`m.import_csv.node.flow_divider(...)`; GIS uses the same paths under
+`m.import_gis`. Exports include named hydraulic fields, x/y and tags. For a
+fresh network, import curves, create nodes with unassigned divider links,
+import links, then assign diverted links. With existing links/curves,
+`mode="update"` supports direct export/import round trips.
 
 ## Examples
 
@@ -87,6 +165,11 @@ The repository includes a small learning suite in [`examples/`](https://github.c
 | Time and count helpers | [`08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/08_time_and_count_functions.py) | [`standard/08_time_and_count_functions.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/08_time_and_count_functions.py) |
 | Get/set patterns | [`09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/09_get_set_examples.py) | [`standard/09_get_set_examples.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/09_get_set_examples.py) |
 | Build a model from scratch | [`10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/10_create_model_from_scratch_add_remove.py) | [`standard/10_create_model_from_scratch_add_remove.py`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/standard/10_create_model_from_scratch_add_remove.py) |
+| Add/remove LID controls | [`17_add_remove_lids.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/17_add_remove_lids.ipynb) | Focused notebook |
+| Assign LIDs to subcatchments | [`18_subcatchment_lid_usage.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/18_subcatchment_lid_usage.ipynb) | Focused notebook |
+| Compare LID scenarios | [`19_lid_scenario_comparison.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/19_lid_scenario_comparison.ipynb) | Scenario lab notebook |
+| Compare rainfall scenarios | [`20_rainfall_scenario_comparison.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/20_rainfall_scenario_comparison.ipynb) | Design-storm scenario lab |
+| Run scenarios in parallel | [`21_parallel_scenario_runs.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/21_parallel_scenario_runs.ipynb) | Parallel scenario lab |
 
 Run them from the repository root:
 
@@ -162,6 +245,11 @@ For users who prefer a browsable learning reference, the `examples/` folder incl
 - [`examples/14_all_remove_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/14_all_remove_functions.ipynb): a complete removal reference for `m.remove.<category>.<element_type>()`.
 - [`examples/15_all_plot_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/15_all_plot_functions.ipynb): a complete plotting reference for layout, time-series, and profile functions.
 - [`examples/16_all_import_export_functions.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/16_all_import_export_functions.ipynb): a complete import/export reference for `m.import_csv`, `m.import_gis`, and `m.export`.
+- [`examples/17_add_remove_lids.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/17_add_remove_lids.ipynb): a focused guide to adding and removing EPA SWMM LID controls.
+- [`examples/18_subcatchment_lid_usage.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/18_subcatchment_lid_usage.ipynb): a focused guide to assigning, replacing, removing, and clearing LID usages on subcatchments.
+- [`examples/19_lid_scenario_comparison.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/19_lid_scenario_comparison.ipynb): a scenario lab that builds a sample model, runs no-LID and LID alternatives, and compares hydrographs, peaks, totals, and subcatchment-level reductions with plots.
+- [`examples/20_rainfall_scenario_comparison.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/20_rainfall_scenario_comparison.ipynb): a scenario lab that builds a sample model, runs 2-year, 30-year, and 100-year rainfall events with and without climate-change uplift factors, and compares rainfall, runoff, peak flow, and subcatchment-level responses with plots.
+- [`examples/21_parallel_scenario_runs.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/21_parallel_scenario_runs.ipynb): a parallel scenario lab that dispatches independent SWMMX scenarios as separate Python worker processes and compares LIDs, conduit diameters, invert elevations, roughness, and rainfall events.
 
 These notebooks are useful both as tutorials and as a practical API checklist when editing models interactively in Jupyter, VS Code, or Spyder.
 
@@ -237,6 +325,96 @@ Coordinate handling is explicit where geometry is part of the object definition:
 - new rain gages may still omit coordinates, in which case `swmmx` uses the maximum mapped `x` and `y`, or `(0, 0)` when the model has no map coordinates.
 
 Every add or remove operation sets `m.modified` to `True`. If the model already had results, the edit also sets `m.results_stale` to `True` and invalidates the old result accessors until the model is run again.
+
+### LID controls
+
+`swmmx` can create and remove complete EPA SWMM LID controls through the same editable API. A LID control is written as a multi-row `[LID_CONTROLS]` object: one type row plus the required process-layer rows for the selected LID type. The public function accepts friendly type names or SWMM codes (`BC`, `RG`, `GR`, `IT`, `PP`, `RB`, `RD`, `VS`) and layer dictionaries for `surface`, `soil`, `storage`, `pavement`, `drain`, `drain_mat`, and pollutant `removals`.
+
+```python
+m.add.hydrology.lid_control(
+    "BR1",
+    type="bio_retention_cell",
+    surface={
+        "storage_depth": 150,
+        "vegetation_fraction": 0.1,
+        "roughness": 0.05,
+        "slope": 0.0,
+        "side_slope": 0.0,
+    },
+    soil={
+        "thickness": 450,
+        "porosity": 0.45,
+        "field_capacity": 0.20,
+        "wilting_point": 0.10,
+        "conductivity": 25,
+        "conductivity_slope": 10,
+        "suction_head": 75,
+    },
+    storage={
+        "height": 300,
+        "void_ratio": 0.75,
+        "seepage_rate": 5,
+        "clogging_factor": 0,
+    },
+    drain={
+        "coefficient": 0.5,
+        "exponent": 0.5,
+        "offset_height": 0,
+        "delay": 0,
+    },
+)
+
+# Remove one control. If it is used by [LID_USAGE], this blocks by default.
+m.remove.hydrology.lid_control("BR1")
+
+# Cascade-remove dependent LID_USAGE rows intentionally.
+m.remove.hydrology.lid_control(["BR1", "RG1"], force=True)
+```
+
+By default, `lid_control` validates the layer combination for each EPA SWMM LID type: bio-retention cells, rain gardens, green roofs, infiltration trenches, permeable pavement, rain barrels, rooftop disconnection, and vegetative swales. Missing values inside a provided layer are filled with SWMM-safe zeros so users can start simple and then refine parameters. Use `strict_layers=False` only when deliberately preserving an advanced or non-standard SWMM layer combination.
+
+### Subcatchment LID usage
+
+Version `0.0.42` adds high-level support for assigning LID controls to subcatchments through the same namespace style as other model edits. These methods write `[LID_USAGE]` rows and cover the EPA SWMM LID Usage Editor and LID Group Editor settings.
+
+```python
+# Add one LID control assignment to a subcatchment.
+m.set.subcatchment.lid_controls.add("S1", "BR1", area_percent=10)
+
+# Use full editor options when needed.
+m.set.subcatchment.lid_controls.add(
+    "S1",
+    "BR1",
+    area_percent=10,
+    number=2,
+    width=4.5,
+    initial_saturation=25,
+    from_impervious_percent=40,
+    from_pervious_percent=10,
+    return_flow_to_pervious=True,
+    report_file="S1_BR1_lid.txt",
+    drain_to="J1",
+    replace=True,
+)
+
+# Inspect, remove one assignment, or clear all assignments from a subcatchment.
+m.get.subcatchment.lid_controls("S1")
+m.set.subcatchment.lid_controls.remove("S1", "BR1")
+m.set.subcatchment.lid_controls.clear("S1")
+
+# Replace all LID assignments for S1 in one call.
+m.set.subcatchment.lid_controls(
+    [
+        {"lid_control": "BR1", "area_percent": 10},
+        {"lid_control": "RG1", "area_percent": 5},
+    ],
+    ids="S1",
+)
+```
+
+Mandatory inputs for `.add()` are the subcatchment ID, the LID control ID, and one sizing definition: `area`, `area_percent`, or `occupies_full_subcatchment=True`. Optional inputs are `number` (default `1`), `width` (auto-estimated from area when omitted), `initial_saturation`, `from_impervious_percent`, `from_pervious_percent`, `return_flow_to_pervious`, `report_file`, `drain_to`, and `replace`. `area_percent` is converted to SWMM's per-unit LID area using the model unit system: hectares to square meters for SI flow units, and acres to square feet for US flow units. Group checks prevent total LID area, impervious-area treatment, or pervious-area treatment from exceeding 100% within a subcatchment.
+
+For worked LID guides, see [`examples/17_add_remove_lids.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/17_add_remove_lids.ipynb) and [`examples/18_subcatchment_lid_usage.ipynb`](https://github.com/mgeranmehr/swmmx_dev/blob/main/examples/18_subcatchment_lid_usage.ipynb).
 
 Generic fallbacks are also available:
 
@@ -416,8 +594,8 @@ The public dotted API is organized into the following categories and subcategori
 - **`node`**: `id`, `count`, `type`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`, `tag`, `coordinate`, `external_inflow`, `dry_weather_flow`, `treatment`, `depth`, `head`, `volume`, `lateral_inflow`, `total_inflow`, `flooding`, `overflow`, `pollutant_concentration`
 - **`junction`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`
 - **`outfall`**: `id`, `count`, `invert_elevation`, `type`, `fixed_stage`, `tidal_curve`, `time_series`, `tide_gate`, `route_to`
-- **`flow_divider`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`, `type`, `diverted_link`, `cutoff_flow`, `diversion_curve`, `weir_height`, `weir_coefficient`
-- **`storage_unit`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `storage_curve_type`, `storage_curve`, `area`, `area_coefficient`, `area_exponent`, `area_constant`, `evaporation_factor`, `seepage_loss`
+- **`flow_divider`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `surcharge_depth`, `ponded_area`, `type`, `diverted_link`, `cutoff_flow`, `diversion_curve`, `weir_height`, `weir_coefficient`, `x`, `y`, `tag`, `depth`, `head`, `volume`, `lateral_inflow`, `total_inflow`, `flooding`
+- **`storage_unit`**: `id`, `count`, `invert_elevation`, `max_depth`, `initial_depth`, `storage_curve_type`, `storage_curve`, `area`, `area_coefficient`, `area_exponent`, `area_constant`, `evaporation_factor`, `seepage_loss`, `x`, `y`, `tag`, `depth`, `head`, `volume`, `lateral_inflow`, `total_inflow`, `flooding`, `surcharge_depth`, `suction_head`, `hydraulic_conductivity`, `initial_moisture_deficit`
 - **`link`**: `id`, `count`, `type`, `from_node`, `to_node`, `inlet_offset`, `outlet_offset`, `initial_flow`, `maximum_flow`, `flap_gate`, `tag`, `vertices`, `flow`, `depth`, `velocity`, `volume`, `capacity`, `setting`, `pollutant_concentration`
 - **`conduit`**: `id`, `count`, `from_node`, `to_node`, `length`, `roughness`, `inlet_offset`, `outlet_offset`, `initial_flow`, `maximum_flow`, `shape`, `geometry`, `barrels`, `culvert_code`, `entry_loss`, `exit_loss`, `average_loss`, `flap_gate`, `seepage_rate`, `slope`, `full_area`, `full_depth`, `hydraulic_radius`, `full_flow`, `normal_depth`, `critical_depth`, `flow`, `depth`, `velocity`, `capacity`
 - **`pump`**: `id`, `count`, `from_node`, `to_node`, `curve`, `initial_status`, `startup_depth`, `shutoff_depth`, `flow`, `status`, `setting`, `energy`
@@ -433,11 +611,12 @@ The public dotted API is organized into the following categories and subcategori
 - **`inlet_usage`**: `node`, `inlet`, `conduit`, `number`, `clogging_factor`, `flow_restriction`
 - **`lid_control`**: `id`, `count`, `type`
 - **`lid_surface`**: `storage_depth`, `vegetation_fraction`, `roughness`, `slope`, `side_slope`
-- **`lid_pavement`**: `thickness`, `void_ratio`, `impervious_surface_fraction`, `permeability`, `clogging_factor`
+- **`lid_pavement`**: `thickness`, `void_ratio`, `impervious_surface_fraction`, `permeability`, `clogging_factor`, `regeneration_interval`, `regeneration_fraction`
 - **`lid_soil`**: `thickness`, `porosity`, `field_capacity`, `wilting_point`, `conductivity`, `conductivity_slope`, `suction_head`
-- **`lid_storage`**: `height`, `void_ratio`, `seepage_rate`, `clogging_factor`
+- **`lid_storage`**: `height`, `void_ratio`, `seepage_rate`, `clogging_factor`, `covered`
 - **`lid_drain`**: `coefficient`, `exponent`, `offset_height`, `delay`, `open_level`, `closed_level`, `control_curve`
-- **`lid_usage`**: `subcatchment`, `lid_control`, `number`, `area`, `width`, `initial_saturation`, `from_impervious_percent`, `from_pervious_percent`, `outlet`, `drain_to`, `inflow`, `evaporation`, `infiltration`, `surface_outflow`, `drain_outflow`, `storage`
+- **`lid_drain_mat`**: `thickness`, `void_ratio`, `roughness`
+- **`lid_usage`**: `subcatchment`, `lid_control`, `number`, `area`, `width`, `initial_saturation`, `from_impervious_percent`, `return_flow_to_pervious`, `report_file`, `drain_to`, `from_pervious_percent`, `area_percent`, `occupies_full_subcatchment`, `inflow`, `evaporation`, `infiltration`, `surface_outflow`, `drain_outflow`, `storage`
 - **`aquifer`**: `id`, `count`, `porosity`, `wilting_point`, `field_capacity`, `conductivity`, `conductivity_slope`, `tension_slope`, `upper_evaporation_fraction`, `lower_evaporation_depth`, `lower_groundwater_loss_rate`, `bottom_elevation`, `water_table_elevation`, `unsaturated_moisture`, `upper_evaporation_pattern`
 - **`groundwater`**: `subcatchment`, `aquifer`, `node`, `surface_elevation`, `a1`, `b1`, `a2`, `b2`, `a3`, `fixed_depth`, `threshold_elevation`, `lateral_flow_equation`, `deep_flow_equation`
 - **`snow_pack`**: `id`, `count`, `plowable_fraction`, `impervious_fraction`, `pervious_fraction`, `minimum_melt_coefficient`, `maximum_melt_coefficient`, `base_temperature`, `free_water_capacity_fraction`, `initial_snow_depth`, `initial_free_water`, `depth_at_100_percent_cover`, `removal_depth`, `fraction_to_impervious`, `fraction_to_pervious`, `fraction_to_immediate_melt`, `fraction_to_subcatchment`, `fraction_to_outflow`, `destination_subcatchment`
@@ -500,3 +679,36 @@ The first validator checks duplicate IDs, missing required options, invalid unit
 | Native engine handling | **Bundled Windows/Linux/macOS engines plus custom path** | Uses SWMM engine bindings | Runs SWMM through configured executable/tooling | Usually external / integration | Solver bindings |
 | Best use case | **Complete model lifecycle in one Python API** | Real-time control and simulation intervention | Advanced `.inp`, `.rpt`, `.out` automation | Pandas/GeoPandas engineering analysis | Developers needing solver/output bindings |
 | Main strength | **Unified, readable, high-level workflow** | Runtime control | Mature file/result automation | Pandas-first productivity | Low-level SWMM access |
+
+## Land-cover and GIS-based subcatchment parameterization
+
+SWMMX `landcover` is distinct from EPA SWMM's native water-quality `[LANDUSES]`
+feature. Define physical classes, assign fractions or intersect GIS polygons,
+preview hydrology, assess LID candidate areas, and compare independent scenarios.
+
+```python
+from swmmx import swmm, landcover
+
+m = swmm("model.inp")
+lc = landcover(m, units="SI")
+lc.define_classes({"roof": {"impervious": 1}, "green": {"impervious": 0}})
+lc.set_coverage({"S1": {"roof": 0.4, "green": 0.6}})
+preview = lc.preview(parameters=["imperviousness"])
+print(preview.changes)  # inspect before/after values and units
+if preview.can_apply:
+    lc.apply(preview)
+m.save("landcover_model.inp")  # also writes landcover_model.swmmx.json
+```
+
+Area-weighted parameters are a preprocessing approximation, not independent
+SWMM runoff planes. GIS requires optional GeoPandas/Shapely and an explicit
+projected area CRS. LID suitability supplies candidate bounds without creating
+controls or usage. Native LANDUSES conversion is optional and protects existing
+quality data by default.
+
+See the [API, capability matrix and modelling guide](docs/landcover.md) and
+[executable notebook 23](examples/23_landcover.ipynb) for GIS, subcatchments,
+infiltration, LIDs, native quality integration, validation and persistence.
+
+Bulk tables, structured validation and frontend integration are explained in the
+[backend contract](docs/landcover_backend.md).

@@ -98,6 +98,27 @@ def validate_document(document: InpDocument, has_results: bool) -> ValidationRes
     curves = set(_ids(document, "CURVES"))
     patterns = set(_ids(document, "PATTERNS"))
 
+    from .errors import SWMMXError
+    from .node_fields import NODE_SECTIONS, read_node_row, build_node_row
+
+    for category, section in NODE_SECTIONS.items():
+        for row in document.rows(section):
+            try:
+                fields = read_node_row(category, row)
+                object_id = fields.pop("id")
+                build_node_row(document, category, object_id, fields)
+                if category == "flow_divider":
+                    outgoing = [link for name in ("CONDUITS", "PUMPS", "ORIFICES", "WEIRS", "OUTLETS")
+                                for link in document.rows(name) if len(link) >= 3 and link[1] == object_id]
+                    if len(outgoing) > 2:
+                        raise ValueError("A flow divider can have at most two outgoing links.")
+                    if fields["diverted_link"] == "*":
+                        issues.append(ValidationIssue(severity="error", code="UNASSIGNED_DIVERTED_LINK",
+                            message=f"Divider '{object_id}' has no diverted_link; assign it after constructing the outlet link.", section=section, object_id=object_id))
+            except (SWMMXError, ValueError, IndexError) as exc:
+                issues.append(ValidationIssue(severity="error", code="INVALID_NODE_PARAMETERS",
+                    message=str(exc), section=section, object_id=row[0] if row else None))
+
     if not nodes:
         issues.append(
             ValidationIssue(

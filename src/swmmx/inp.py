@@ -15,6 +15,8 @@ import re
 import shlex
 from typing import Iterable
 
+from .errors import ObjectNotFoundError
+
 
 SECTION_RE = re.compile(r"^\s*\[(?P<name>[^\]]+)\]\s*$")
 
@@ -203,6 +205,27 @@ LINKS               ALL
 
         for row in rows:
             self.append_row(section_name, row)
+
+    def replace_row(self, section_name: str, object_id: str, tokens: Iterable[object]) -> None:
+        """Replace one variable-length row in place, preserving its inline comment."""
+        section = self.ensure_section(section_name)
+        rendered = " ".join(_quote_token(str(token)) for token in tokens if token is not None)
+        for index, line in enumerate(section.lines):
+            row = tokenize_data_line(line)
+            if row and row[0] == object_id:
+                # A semicolon inside a quoted token is data, not a comment.
+                quoted = False
+                comment = ""
+                for offset, char in enumerate(line):
+                    if char == '"':
+                        quoted = not quoted
+                    elif char == ";" and not quoted:
+                        comment = " " + line[offset:]
+                        break
+                section.lines[index] = rendered + comment
+                section.modified = True
+                return
+        raise ObjectNotFoundError(f"'{object_id}' is missing from [{section_name}].")
 
     def remove_rows(self, section_name: str, ids: Iterable[str], *, id_index: int = 0) -> list[list[str]]:
         """Remove rows whose ID field matches one of ``ids``."""

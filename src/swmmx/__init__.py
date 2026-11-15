@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Literal
 
 from .dependencies import require_runtime_dependencies
+from .matplotlib_compat import apply_matplotlib_compat
 from .errors import (
     DependencyError,
     DimensionMismatchError,
@@ -47,8 +47,18 @@ from .errors import (
     ValidationError,
 )
 from .imports import ImportIssue, ImportResult
+from .landcover import (LandCover, LandCoverClass, LandCoverCoverage, landcover,
+    LandCoverIssue, LandCoverReport, LandCoverProject, LandCoverPreview, LandCoverValidationError, LandCoverCancelled)
+
+apply_matplotlib_compat()
 
 __all__ = [
+    "LandCoverIssue", "LandCoverReport", "LandCoverProject", "LandCoverPreview",
+    "LandCoverValidationError", "LandCoverCancelled",
+    "landcover",
+    "LandCover",
+    "LandCoverClass",
+    "LandCoverCoverage",
     "DependencyError",
     "DimensionMismatchError",
     "DuplicateIDError",
@@ -92,10 +102,7 @@ __all__ = [
     "swmm",
 ]
 
-try:
-    __version__ = version("swmmx")
-except PackageNotFoundError:
-    __version__ = "0+unknown"
+__version__ = "0.0.44"
 
 
 def swmm(

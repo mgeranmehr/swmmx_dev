@@ -290,6 +290,9 @@ def _node_ground_elevation(model: "SWMMModel", node_id: str, invert: float) -> f
         for row in model._document.rows(section):
             if row and row[0] == node_id:
                 try:
+                    if section == "DIVIDERS":
+                        from ..node_fields import read_node_row
+                        return invert + read_node_row("flow_divider", row)["max_depth"]
                     return invert + float(row[2]) if len(row) >= 3 else invert
                 except ValueError:
                     return invert

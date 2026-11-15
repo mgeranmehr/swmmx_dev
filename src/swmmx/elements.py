@@ -127,6 +127,7 @@ EDITABLE_ELEMENT_SPECS = (
             "curb_length",
             "snow_pack",
             "polygon",
+            "lid_controls",
             "n_impervious",
             "n_pervious",
             "depression_storage_impervious",
@@ -184,9 +185,11 @@ EDITABLE_ELEMENT_SPECS = (
         sections=("LID_CONTROLS",),
         scope="lid_control",
         required=("type",),
-        optional=("parameters", "surface", "pavement", "soil", "storage", "drain", "drain_mat"),
+        optional=("parameters", "surface", "pavement", "soil", "storage", "drain", "drain_mat", "removals", "strict_layers"),
         positional=(PositionalParameter("type"), PositionalParameter("parameters", None)),
-        purpose="Reserve a multi-layer LID control definition.",
+        implemented=True,
+        purpose="Add a multi-layer EPA SWMM LID control definition.",
+        example='m.add.hydrology.lid_control("BR1", type="bio_retention_cell", surface={...}, soil={...}, storage={...})',
     ),
     # Nodes
     _spec(
@@ -218,8 +221,8 @@ EDITABLE_ELEMENT_SPECS = (
         purpose="Add an outfall and a coordinate record.",
         example='m.add.node.outfall("OUT1", x=100.0, y=0.0, invert_elevation=9.0, type="FREE")',
     ),
-    _spec("node", "divider", sections=("DIVIDERS", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area", "type", "diverted_link", "cutoff_flow", "diversion_curve", "weir_height", "weir_coefficient"), coordinate_policy="explicit_required", purpose="Reserve a flow-divider node definition."),
-    _spec("node", "storage_unit", sections=("STORAGE", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "storage_curve_type", "storage_curve", "area", "area_coefficient", "area_exponent", "area_constant", "evaporation_factor", "seepage_loss"), coordinate_policy="explicit_required", purpose="Reserve a storage-unit node definition."),
+    _spec("node", "divider", sections=("DIVIDERS", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "surcharge_depth", "ponded_area", "type", "diverted_link", "cutoff_flow", "diversion_curve", "weir_height", "weir_coefficient", "tag"), coordinate_policy="explicit_required", implemented=True, references={"diverted_link": "link", "diversion_curve": "curve"}, dependencies=("link.from_node", "link.to_node", "subcatchment.outlet"), purpose="Add a flow divider; assign diverted_link after constructing its outgoing link."),
+    _spec("node", "storage_unit", sections=("STORAGE", "COORDINATES"), scope="node", required=("x", "y"), optional=("invert_elevation", "max_depth", "initial_depth", "storage_curve_type", "storage_curve", "area", "area_coefficient", "area_exponent", "area_constant", "evaporation_factor", "seepage_loss", "surcharge_depth", "suction_head", "hydraulic_conductivity", "initial_moisture_deficit", "tag"), coordinate_policy="explicit_required", implemented=True, references={"storage_curve": "curve"}, dependencies=("link.from_node", "link.to_node", "subcatchment.outlet"), purpose="Add storage with functional, tabular or analytical geometry and Green-Ampt seepage."),
     # Links
     _spec(
         "link",
@@ -576,6 +579,79 @@ class EditableElementService:
         "CUSTOM",
     }
 
+    LID_TYPE_ALIASES = {
+        "BC": "BC", "BIORETENTION": "BC", "BIORETENTIONCELL": "BC", "BIO RETENTION": "BC", "BIO RETENTION CELL": "BC", "BIO_RETENTION": "BC", "BIO_RETENTION_CELL": "BC",
+        "RAIN GARDEN": "RG", "RAINGARDEN": "RG", "RAIN_GARDEN": "RG", "RG": "RG",
+        "GREEN ROOF": "GR", "GREENROOF": "GR", "GREEN_ROOF": "GR", "GR": "GR",
+        "INFILTRATION TRENCH": "IT", "INFILTRATIONTRENCH": "IT", "INFILTRATION_TRENCH": "IT", "IT": "IT",
+        "PERMEABLE PAVEMENT": "PP", "PERMEABLEPAVEMENT": "PP", "POROUS PAVEMENT": "PP", "PERMEABLE_PAVEMENT": "PP", "PP": "PP",
+        "RAIN BARREL": "RB", "RAINBARREL": "RB", "RAIN_BARREL": "RB", "RB": "RB",
+        "ROOFTOP DISCONNECTION": "RD", "ROOFTOPDISCONNECTION": "RD", "ROOF DISCONNECTION": "RD", "ROOFDISCONNECTION": "RD", "ROOFTOP_DISCONNECTION": "RD", "RD": "RD",
+        "VEGETATIVE SWALE": "VS", "VEGETATIVESWALE": "VS", "VEGETATIVE_SWALE": "VS", "VS": "VS",
+    }
+    LID_TYPE_NAMES = {
+        "BC": "bio_retention_cell", "RG": "rain_garden", "GR": "green_roof", "IT": "infiltration_trench",
+        "PP": "permeable_pavement", "RB": "rain_barrel", "RD": "rooftop_disconnection", "VS": "vegetative_swale",
+    }
+    LID_LAYER_ALIASES = {
+        "surface": "surface", "surf": "surface", "pavement": "pavement", "pave": "pavement", "soil": "soil",
+        "storage": "storage", "store": "storage", "drain": "drain", "underdrain": "drain",
+        "drain_mat": "drain_mat", "drainmat": "drain_mat", "drainage_mat": "drain_mat", "drainagemat": "drain_mat",
+        "removals": "removals", "removal": "removals",
+    }
+    LID_LAYER_CODES = {
+        "surface": "SURFACE", "pavement": "PAVEMENT", "soil": "SOIL", "storage": "STORAGE",
+        "drain": "DRAIN", "drain_mat": "DRAINMAT", "removals": "REMOVALS",
+    }
+    LID_LAYER_FIELDS = {
+        "surface": ("storage_depth", "vegetation_fraction", "roughness", "slope", "side_slope"),
+        "pavement": ("thickness", "void_ratio", "impervious_surface_fraction", "permeability", "clogging_factor", "regeneration_interval", "regeneration_fraction"),
+        "soil": ("thickness", "porosity", "field_capacity", "wilting_point", "conductivity", "conductivity_slope", "suction_head"),
+        "storage": ("height", "void_ratio", "seepage_rate", "clogging_factor", "covered"),
+        "drain": ("coefficient", "exponent", "offset_height", "delay", "open_level", "closed_level", "control_curve"),
+        "drain_mat": ("thickness", "void_ratio", "roughness"),
+    }
+    LID_FIELD_ALIASES = {
+        "storage_depth": ("storage_depth", "berm_height", "storht", "storage", "depth"),
+        "vegetation_fraction": ("vegetation_fraction", "vegetative_volume_fraction", "vegfrac", "veg_frac"),
+        "roughness": ("roughness", "manning", "mannings_n", "n"),
+        "slope": ("slope", "surface_slope"),
+        "side_slope": ("side_slope", "xslope", "swale_side_slope"),
+        "thickness": ("thickness", "thick"),
+        "void_ratio": ("void_ratio", "voids", "vratio", "void_fraction"),
+        "impervious_surface_fraction": ("impervious_surface_fraction", "impervious_fraction", "fracimp", "frac_imperv"),
+        "permeability": ("permeability", "perm"),
+        "clogging_factor": ("clogging_factor", "vclog", "clogging"),
+        "regeneration_interval": ("regeneration_interval", "treg", "regeneration_days"),
+        "regeneration_fraction": ("regeneration_fraction", "freg", "regeneration_fraction_recovered"),
+        "porosity": ("porosity", "por"),
+        "field_capacity": ("field_capacity", "fc"),
+        "wilting_point": ("wilting_point", "wp"),
+        "conductivity": ("conductivity", "ksat", "hydraulic_conductivity"),
+        "conductivity_slope": ("conductivity_slope", "kcoeff", "conductivity_coefficient"),
+        "suction_head": ("suction_head", "suct", "suction"),
+        "height": ("height", "storage_height"),
+        "seepage_rate": ("seepage_rate", "seepage"),
+        "covered": ("covered", "covered_area", "covrd"),
+        "coefficient": ("coefficient", "coeff"),
+        "exponent": ("exponent", "expon"),
+        "offset_height": ("offset_height", "offset", "drain_offset"),
+        "delay": ("delay", "drain_delay"),
+        "open_level": ("open_level", "hopen", "open"),
+        "closed_level": ("closed_level", "hclose", "closed"),
+        "control_curve": ("control_curve", "qcrv", "curve"),
+    }
+    LID_TYPE_LAYERS = {
+        "BC": {"required": ("surface", "soil", "storage"), "optional": ("drain", "removals")},
+        "RG": {"required": ("surface", "soil"), "optional": ("drain", "removals")},
+        "GR": {"required": ("surface", "soil", "drain_mat"), "optional": ("removals",)},
+        "IT": {"required": ("surface", "storage"), "optional": ("drain", "removals")},
+        "PP": {"required": ("surface", "pavement", "storage"), "optional": ("soil", "drain", "removals")},
+        "RB": {"required": ("storage", "drain"), "optional": ("removals",)},
+        "RD": {"required": ("surface",), "optional": ("drain", "removals")},
+        "VS": {"required": ("surface",), "optional": ("removals",)},
+    }
+
     def __init__(self, model: "SWMMModel", registry: EditableElementRegistry) -> None:
         """Bind one executor to one mutable model."""
 
@@ -584,9 +660,12 @@ class EditableElementService:
         self._add_handlers: dict[tuple[str, str], Callable[[EditableElementSpec, str, dict[str, Any]], str]] = {
             ("node", "junction"): self._add_junction,
             ("node", "outfall"): self._add_outfall,
+            ("node", "storage_unit"): self._add_variable_node,
+            ("node", "divider"): self._add_variable_node,
             ("link", "conduit"): self._add_conduit,
             ("hydrology", "rain_gage"): self._add_rain_gage,
             ("hydrology", "subcatchment"): self._add_subcatchment,
+            ("hydrology", "lid_control"): self._add_lid_control,
             ("curve", "pump"): self._add_pump_curve,
             ("time", "time_series"): self._add_time_series,
             ("time", "time_pattern"): self._add_time_pattern,
@@ -594,9 +673,12 @@ class EditableElementService:
         self._remove_handlers: dict[tuple[str, str], Callable[[EditableElementSpec, list[str], bool], dict[str, list[str]]]] = {
             ("node", "junction"): self._remove_junction,
             ("node", "outfall"): self._remove_outfall,
+            ("node", "storage_unit"): self._remove_node_like,
+            ("node", "divider"): self._remove_node_like,
             ("link", "conduit"): self._remove_conduit,
             ("hydrology", "rain_gage"): self._remove_rain_gage,
             ("hydrology", "subcatchment"): self._remove_subcatchment,
+            ("hydrology", "lid_control"): self._remove_lid_control,
             ("curve", "pump"): self._remove_curve,
             ("time", "time_series"): self._remove_time_series,
             ("time", "time_pattern"): self._remove_time_pattern,
@@ -818,6 +900,23 @@ class EditableElementService:
 
     # ---------- add handlers ----------
 
+    def _add_variable_node(self, spec, id, options):
+        from .node_fields import build_node_row, number
+
+        values = dict(options)
+        x, y = self._required_coordinate(spec, values)
+        x, y = number("x", x, nonnegative=False), number("y", y, nonnegative=False)
+        tag = values.pop("tag", None)
+        if tag is not None and (not isinstance(tag, str) or "\n" in tag or "\r" in tag):
+            raise InvalidParameterError("tag must be a single-line string.")
+        category = "flow_divider" if spec.element_type == "divider" else "storage_unit"
+        row = build_node_row(self.model._document, category, id, values)
+        self.model._document.append_row(spec.inp_sections[0], row)
+        self.model._document.append_row("COORDINATES", [id, x, y])
+        if tag:
+            self.model._set_tag("Node", id, tag)
+        return id
+
     def _add_junction(self, spec: EditableElementSpec, id: str, options: dict[str, Any]) -> str:
         """Add a junction and its explicit coordinate row."""
 
@@ -999,6 +1098,7 @@ class EditableElementService:
         self._assert_reference(spec, id, "outlet", outlet, "node_or_subcatchment")
         values.pop("rain_gage", None)
         values.pop("outlet", None)
+        lid_controls = values.pop("lid_controls", None)
         snow_pack = values.pop("snow_pack", None)
         if snow_pack not in {None, ""}:
             self._assert_reference(spec, id, "snow_pack", snow_pack, "snow_pack")
@@ -1039,6 +1139,8 @@ class EditableElementService:
         ]
         for px, py in points:
             self.model._document.append_row("POLYGONS", [id, px, py])
+        if lid_controls is not None:
+            self.model._set_subcatchment_lid_controls(value=lid_controls, ids=id)
         return id
 
     def _subcatchment_infiltration_row(self, spec: EditableElementSpec, id: str, values: dict[str, Any]) -> list[Any]:
@@ -1067,6 +1169,154 @@ class EditableElementService:
             self._number(spec, "dry_time", values.pop("dry_time", 0.0), non_negative=True),
             self._number(spec, "maximum_volume", values.pop("maximum_volume", 0.0), non_negative=True),
         ]
+
+    def _add_lid_control(self, spec: EditableElementSpec, id: str, options: dict[str, Any]) -> str:
+        """Add one complete multi-row EPA SWMM LID control."""
+
+        values = dict(options)
+        lid_type = self._normalize_lid_type(self._require(spec, values, "type"))
+        values.pop("type", None)
+        strict_layers = bool(values.pop("strict_layers", True))
+        raw_parameters = values.pop("parameters", None)
+        layer_values = self._normalize_lid_layers(spec, raw_parameters, values)
+        self._validate_lid_layers(spec, id, lid_type, layer_values, strict_layers=strict_layers)
+        self._ensure_no_unknown_options(spec, values)
+
+        self.model._document.append_row("LID_CONTROLS", [id, lid_type])
+        for layer in ("surface", "pavement", "soil", "storage", "drain", "drain_mat"):
+            if layer in layer_values:
+                self.model._document.append_row(
+                    "LID_CONTROLS",
+                    [id, self.LID_LAYER_CODES[layer], *self._lid_layer_tokens(spec, id, layer, layer_values[layer])],
+                )
+        if "removals" in layer_values:
+            self.model._document.append_row(
+                "LID_CONTROLS",
+                [id, self.LID_LAYER_CODES["removals"], *self._lid_removal_tokens(spec, layer_values["removals"])],
+            )
+        return id
+
+    def _normalize_lid_type(self, value: Any) -> str:
+        """Normalize a public LID type spelling to SWMM's two-letter code."""
+
+        text = str(value).strip()
+        key = text.upper().replace("-", " ").replace("_", " ")
+        compact = key.replace(" ", "")
+        for candidate in (key, compact, text.upper()):
+            if candidate in self.LID_TYPE_ALIASES:
+                return self.LID_TYPE_ALIASES[candidate]
+        allowed = ", ".join(f"{code} ({name})" for code, name in self.LID_TYPE_NAMES.items())
+        raise InvalidParameterError(f"Cannot add lid_control: type '{value}' is invalid. Expected one of: {allowed}.")
+
+    def _normalize_lid_layers(self, spec: EditableElementSpec, raw_parameters: Any, options: dict[str, Any]) -> dict[str, Any]:
+        """Collect LID layers from named kwargs and optional 'parameters' mapping."""
+
+        layers: dict[str, Any] = {}
+        if raw_parameters is not None:
+            if not isinstance(raw_parameters, dict):
+                raise InvalidParameterError("Cannot add lid_control: 'parameters' must be a dictionary of LID layer names to values.")
+            for raw_name, raw_value in raw_parameters.items():
+                layers[self._normalize_lid_layer_name(spec, raw_name)] = raw_value
+        for raw_name in list(options):
+            layer = self.LID_LAYER_ALIASES.get(str(raw_name).lower())
+            if layer:
+                layers[layer] = options.pop(raw_name)
+        return layers
+
+    def _normalize_lid_layer_name(self, spec: EditableElementSpec, name: Any) -> str:
+        """Normalize one public LID layer name."""
+
+        key = str(name).strip().lower().replace("-", "_").replace(" ", "_")
+        layer = self.LID_LAYER_ALIASES.get(key) or self.LID_LAYER_ALIASES.get(key.replace("_", ""))
+        if not layer:
+            allowed = ", ".join(sorted(self.LID_LAYER_ALIASES))
+            raise InvalidParameterError(f"Cannot add {spec.element_type}: unknown LID layer '{name}'. Allowed layers: {allowed}.")
+        return layer
+
+    def _validate_lid_layers(self, spec: EditableElementSpec, id: str, lid_type: str, layers: dict[str, Any], *, strict_layers: bool) -> None:
+        """Validate required and allowed layers for one EPA SWMM LID type."""
+
+        rule = self.LID_TYPE_LAYERS[lid_type]
+        required = set(rule["required"])
+        optional = set(rule["optional"])
+        present = set(layers)
+        missing = sorted(required - present)
+        if strict_layers and missing:
+            raise MissingRequiredParameterError(
+                f"Cannot add lid_control '{id}': {self.LID_TYPE_NAMES[lid_type]} requires LID layer(s): {', '.join(missing)}."
+            )
+        unexpected = sorted(present - (required | optional))
+        if strict_layers and unexpected:
+            raise InvalidParameterError(
+                f"Cannot add lid_control '{id}': layer(s) {', '.join(unexpected)} are not valid for {self.LID_TYPE_NAMES[lid_type]}. "
+                "Pass strict_layers=False only when preserving an advanced SWMM file intentionally."
+            )
+        if "drain" in present and isinstance(layers["drain"], dict):
+            curve = self._value_from_aliases(layers["drain"], "control_curve")
+            if curve not in {None, ""}:
+                self._assert_reference(spec, id, "drain.control_curve", curve, "curve")
+
+    def _lid_layer_tokens(self, spec: EditableElementSpec, id: str, layer: str, values: Any) -> list[Any]:
+        """Render one LID layer dictionary/list to fixed SWMM row tokens."""
+
+        fields = self.LID_LAYER_FIELDS[layer]
+        if isinstance(values, (list, tuple)):
+            if len(values) > len(fields):
+                raise InvalidParameterError(f"Cannot add lid_control '{id}': layer '{layer}' accepts at most {len(fields)} values.")
+            raw = list(values) + [None if field == "control_curve" else 0.0 for field in fields[len(values):]]
+        elif isinstance(values, dict):
+            allowed_aliases = {alias.lower().replace("-", "_").replace(" ", "_") for field in fields for alias in self.LID_FIELD_ALIASES.get(field, (field,))}
+            normalized_keys = {str(key).strip().lower().replace("-", "_").replace(" ", "_") for key in values}
+            unknown = sorted(normalized_keys - allowed_aliases)
+            if unknown:
+                raise InvalidParameterError(f"Cannot add lid_control '{id}': unknown field(s) for layer '{layer}': {', '.join(unknown)}.")
+            raw = [self._value_from_aliases(values, field) for field in fields]
+            raw = [None if field == "control_curve" and value is None else 0.0 if value is None else value for field, value in zip(fields, raw)]
+        elif values is None:
+            raw = [0.0] * len(fields)
+        else:
+            raise InvalidParameterError(f"Cannot add lid_control '{id}': layer '{layer}' must be a dictionary or sequence.")
+        tokens: list[Any] = []
+        for field, value in zip(fields, raw):
+            if field == "control_curve":
+                tokens.append(value)
+            elif field == "covered":
+                text = str(value).upper()
+                tokens.append(self._yes_no(value) if isinstance(value, bool) or text in {"YES", "NO"} else self._number(spec, field, value, non_negative=True))
+            else:
+                tokens.append(self._number(spec, field, value, non_negative=True))
+        while tokens and tokens[-1] in {None, ""}:
+            tokens.pop()
+        return tokens
+
+    def _value_from_aliases(self, values: dict[str, Any], field: str) -> Any:
+        """Return one value using canonical field names and common EPA/SWMM aliases."""
+
+        normalized = {str(key).strip().lower().replace("-", "_").replace(" ", "_"): value for key, value in values.items()}
+        for alias in self.LID_FIELD_ALIASES.get(field, (field,)):
+            key = alias.lower().replace("-", "_").replace(" ", "_")
+            if key in normalized:
+                return normalized[key]
+        return None
+
+    def _lid_removal_tokens(self, spec: EditableElementSpec, removals: Any) -> list[Any]:
+        """Render a REMOVALS layer from dict or pair sequence."""
+
+        tokens: list[Any] = []
+        if isinstance(removals, dict):
+            iterable = removals.items()
+        elif isinstance(removals, (list, tuple)):
+            if removals and all(isinstance(item, (list, tuple)) and len(item) == 2 for item in removals):
+                iterable = removals
+            elif len(removals) % 2 == 0:
+                iterable = zip(removals[0::2], removals[1::2])
+            else:
+                raise InvalidParameterError("Cannot add lid_control: removals must contain pollutant/removal pairs.")
+        else:
+            raise InvalidParameterError("Cannot add lid_control: removals must be a dictionary or pollutant/removal pairs.")
+        for pollutant, removal in iterable:
+            tokens.extend([str(pollutant), self._number(spec, "removal", removal, non_negative=True)])
+        return tokens
 
     def _add_pump_curve(self, spec: EditableElementSpec, id: str, options: dict[str, Any]) -> str:
         """Add a pump curve using ordinary SWMM curve rows."""
@@ -1171,6 +1421,16 @@ class EditableElementService:
     def _remove_node_like(self, spec: EditableElementSpec, ids: list[str], force: bool) -> dict[str, list[str]]:
         """Remove node rows while guarding node references."""
 
+        section = spec.inp_sections[0]
+        missing = set(ids) - set(self.model._document.section_ids(section))
+        if missing:
+            raise UnknownIDError(f"Unknown {spec.element_type} ID(s): {', '.join(sorted(missing))}.")
+        # Complex attached records cannot safely be rewritten during a cascade.
+        attached = [name for name in ("INFLOWS", "DWF", "TREATMENT", "RDII", "GROUNDWATER", "INLET_USAGE")
+                    if any(any(token in ids for token in row) for row in self.model._document.rows(name))]
+        if attached or self._control_dependencies(ids):
+            error = NotImplementedYetError if force else DependencyError
+            raise error("Node removal requires rewriting attached records/control rules; automatic rewriting is not implemented yet.")
         link_dependencies = self._link_dependencies(ids)
         subcatchment_dependencies = self._subcatchment_outlet_dependencies(ids)
         if (link_dependencies or subcatchment_dependencies) and not force:
@@ -1198,11 +1458,12 @@ class EditableElementService:
                     "Automatic cascading removal is currently implemented only for dependent conduits."
                 )
             dependency_ids = list(dict.fromkeys(item[1] for item in link_dependencies))
+            self._guard_conduit_removal(dependency_ids, force=True, removing_nodes=ids)
             self._remove_conduit_rows(dependency_ids)
 
-        section = "JUNCTIONS" if spec.element_type == "junction" else "OUTFALLS"
         self.model._document.remove_rows(section, ids)
         self.model._document.remove_rows("COORDINATES", ids)
+        self.model._document.remove_matching_rows("TAGS", lambda row: len(row) > 1 and row[0].upper() == "NODE" and row[1] in ids)
         return {
             "removed": ids,
             "warnings": [],
@@ -1212,6 +1473,7 @@ class EditableElementService:
     def _remove_conduit(self, spec: EditableElementSpec, ids: list[str], force: bool) -> dict[str, list[str]]:
         """Remove conduits while protecting control references."""
 
+        self._guard_conduit_removal(ids, force=force)
         control_refs = self._control_dependencies(ids)
         if control_refs and not force:
             conduit_id = control_refs[0]
@@ -1226,11 +1488,19 @@ class EditableElementService:
         self._remove_conduit_rows(ids)
         return {"removed": ids, "warnings": [], "dependencies_removed": []}
 
+    def _guard_conduit_removal(self, ids, *, force, removing_nodes=()):
+        refs = [row[0] for row in self.model._document.rows("DIVIDERS")
+                if len(row) > 2 and row[2] in ids and row[0] not in removing_nodes]
+        if refs or self._control_dependencies(ids):
+            error = NotImplementedYetError if force else DependencyError
+            raise error("Conduit removal would break divider/control references; automatic rewriting is not implemented yet.")
+
     def _remove_conduit_rows(self, ids: list[str]) -> None:
         """Remove ordinary conduit-associated rows across all relevant sections."""
 
         for section in ("CONDUITS", "XSECTIONS", "LOSSES", "VERTICES"):
             self.model._document.remove_rows(section, ids)
+        self.model._document.remove_matching_rows("TAGS", lambda row: len(row) > 1 and row[0].upper() == "LINK" and row[1] in ids)
 
     def _remove_rain_gage(self, spec: EditableElementSpec, ids: list[str], force: bool) -> dict[str, list[str]]:
         """Remove rain gages when no subcatchments still use them."""
@@ -1276,6 +1546,27 @@ class EditableElementService:
             self.model._document.remove_rows(section, ids)
         self.model._document.remove_matching_rows("TAGS", lambda row: len(row) >= 2 and row[1] in ids)
         return {"removed": ids, "warnings": [], "dependencies_removed": []}
+
+    def _remove_lid_control(self, spec: EditableElementSpec, ids: list[str], force: bool) -> dict[str, list[str]]:
+        """Remove LID controls, optionally cascading dependent LID_USAGE rows."""
+
+        usage_rows = [row for row in self.model._document.rows("LID_USAGE") if len(row) >= 2 and row[1] in ids]
+        if usage_rows and not force:
+            subcatchment_id, lid_id = usage_rows[0][0], usage_rows[0][1]
+            raise DependencyError(
+                f"Cannot remove lid_control '{lid_id}' because it is referenced by LID usage in subcatchment '{subcatchment_id}'. "
+                "Use force=True to remove dependent LID_USAGE rows."
+            )
+        removed_usage = []
+        if usage_rows and force:
+            removed = self.model._document.remove_matching_rows("LID_USAGE", lambda row: len(row) >= 2 and row[1] in ids)
+            removed_usage = [f"lid_usage:{row[0]}:{row[1]}" for row in removed if len(row) >= 2]
+        self.model._document.remove_rows("LID_CONTROLS", ids)
+        self.model._document.remove_matching_rows(
+            "TAGS",
+            lambda row: len(row) >= 3 and row[0].upper() in {"LID", "LID_CONTROL", "LID_CONTROLS"} and row[1] in ids,
+        )
+        return {"removed": ids, "warnings": [], "dependencies_removed": removed_usage}
 
     def _remove_curve(self, spec: EditableElementSpec, ids: list[str], force: bool) -> dict[str, list[str]]:
         """Remove curves only when no objects still refer to them."""
@@ -1376,8 +1667,11 @@ class EditableElementService:
             if len(row) >= 5 and row[4] in curve_ids:
                 dependencies.append(("OUTLETS", row[0], row[4]))
         for row in self.model._document.rows("STORAGE"):
-            if len(row) >= 5 and row[4] in curve_ids:
-                dependencies.append(("STORAGE", row[0], row[4]))
+            if len(row) >= 6 and row[4].upper() == "TABULAR" and row[5] in curve_ids:
+                dependencies.append(("STORAGE", row[0], row[5]))
+        for row in self.model._document.rows("DIVIDERS"):
+            if len(row) >= 5 and row[3].upper() == "TABULAR" and row[4] in curve_ids:
+                dependencies.append(("DIVIDERS", row[0], row[4]))
         return dependencies
 
     def _time_series_dependencies(self, series_ids: list[str]) -> list[tuple[str, str, str]]:

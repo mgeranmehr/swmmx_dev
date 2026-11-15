@@ -215,42 +215,6 @@ def _extend_input_fields() -> None:
     # section layouts live in one declarative map and generate the repetitive
     # field routes below.
     layouts: dict[str, tuple[str, tuple[str, ...], tuple[int, ...]]] = {
-        "flow_divider": (
-            "DIVIDERS",
-            (
-                "id",
-                "invert_elevation",
-                "diverted_link",
-                "type",
-                "cutoff_flow",
-                "diversion_curve",
-                "weir_height",
-                "weir_coefficient",
-                "max_depth",
-                "initial_depth",
-                "surcharge_depth",
-                "ponded_area",
-            ),
-            (0,),
-        ),
-        "storage_unit": (
-            "STORAGE",
-            (
-                "id",
-                "invert_elevation",
-                "max_depth",
-                "initial_depth",
-                "storage_curve_type",
-                "storage_curve",
-                "area",
-                "area_coefficient",
-                "area_exponent",
-                "area_constant",
-                "evaporation_factor",
-                "seepage_loss",
-            ),
-            (0,),
-        ),
         "pump": (
             "PUMPS",
             ("id", "from_node", "to_node", "curve", "initial_status", "startup_depth", "shutoff_depth"),
@@ -392,7 +356,8 @@ def _extend_input_fields() -> None:
                 "width",
                 "initial_saturation",
                 "from_impervious_percent",
-                "outlet",
+                "return_flow_to_pervious",
+                "report_file",
                 "drain_to",
                 "from_pervious_percent",
             ),
@@ -459,7 +424,7 @@ def _extend_input_fields() -> None:
         ("inlet_usage", "conduit"): "conduit",
         ("lid_usage", "subcatchment"): "subcatchment",
         ("lid_usage", "lid_control"): "lid_control",
-        ("lid_usage", "drain_to"): "subcatchment",
+        ("lid_usage", "drain_to"): "node_or_subcatchment",
         ("external_inflow", "node"): "node",
         ("external_inflow", "time_series"): "time_series",
         ("external_inflow", "pattern"): "time_pattern",
@@ -543,6 +508,8 @@ def _extend_input_fields() -> None:
             ("lid_pavement", "impervious_surface_fraction"): FieldSpec("LID_CONTROLS", 4),
             ("lid_pavement", "permeability"): FieldSpec("LID_CONTROLS", 5),
             ("lid_pavement", "clogging_factor"): FieldSpec("LID_CONTROLS", 6),
+            ("lid_pavement", "regeneration_interval"): FieldSpec("LID_CONTROLS", 7),
+            ("lid_pavement", "regeneration_fraction"): FieldSpec("LID_CONTROLS", 8),
             ("lid_soil", "thickness"): FieldSpec("LID_CONTROLS", 2),
             ("lid_soil", "porosity"): FieldSpec("LID_CONTROLS", 3),
             ("lid_soil", "field_capacity"): FieldSpec("LID_CONTROLS", 4),
@@ -554,6 +521,7 @@ def _extend_input_fields() -> None:
             ("lid_storage", "void_ratio"): FieldSpec("LID_CONTROLS", 3),
             ("lid_storage", "seepage_rate"): FieldSpec("LID_CONTROLS", 4),
             ("lid_storage", "clogging_factor"): FieldSpec("LID_CONTROLS", 5),
+            ("lid_storage", "covered"): FieldSpec("LID_CONTROLS", 6),
             ("lid_drain", "coefficient"): FieldSpec("LID_CONTROLS", 2),
             ("lid_drain", "exponent"): FieldSpec("LID_CONTROLS", 3),
             ("lid_drain", "offset_height"): FieldSpec("LID_CONTROLS", 4),
@@ -561,6 +529,12 @@ def _extend_input_fields() -> None:
             ("lid_drain", "open_level"): FieldSpec("LID_CONTROLS", 6),
             ("lid_drain", "closed_level"): FieldSpec("LID_CONTROLS", 7),
             ("lid_drain", "control_curve"): FieldSpec("LID_CONTROLS", 8, reference_target="curve"),
+            ("lid_drain_mat", "thickness"): FieldSpec("LID_CONTROLS", 2),
+            ("lid_drain_mat", "void_ratio"): FieldSpec("LID_CONTROLS", 3),
+            ("lid_drain_mat", "roughness"): FieldSpec("LID_CONTROLS", 4),
+            ("lid_usage", "outlet"): FieldSpec("LID_USAGE", 7, id_index=0, reference_target=None, key_indexes=(0, 1)),
+            ("lid_usage", "out_to_pervious"): FieldSpec("LID_USAGE", 7, id_index=0, reference_target=None, key_indexes=(0, 1)),
+            ("lid_usage", "impervious_treated_percent"): FieldSpec("LID_USAGE", 6, id_index=0, reference_target=None, key_indexes=(0, 1)),
         }
     )
 
@@ -598,6 +572,7 @@ OBJECT_SECTIONS = {
     "lid_soil": ("LID_CONTROLS",),
     "lid_storage": ("LID_CONTROLS",),
     "lid_drain": ("LID_CONTROLS",),
+    "lid_drain_mat": ("LID_CONTROLS",),
     "unit_hydrograph": ("HYDROGRAPHS",),
     "control_rule": ("CONTROLS",),
     "coverage": ("COVERAGES",),
@@ -636,6 +611,8 @@ RESULT_OBJECT_KIND = {
     "conduit": "link",
     "junction": "node",
     "outfall": "node",
+    "storage_unit": "node",
+    "flow_divider": "node",
     "pump": "link",
     "orifice": "link",
     "weir": "link",
@@ -756,7 +733,7 @@ class ParameterCatalog:
                 ("node", "type"),
                 ("link", "type"),
             }
-        return spec.key in INPUT_FIELDS
+        return spec.main_category in {"storage_unit", "flow_divider"} or spec.key in INPUT_FIELDS or spec.key == ("subcatchment", "lid_controls")
 
     def _supports_set(self, spec: ParameterSpec) -> bool:
         """Return whether a setter can execute without a structural placeholder."""
@@ -765,7 +742,7 @@ class ParameterCatalog:
             return False
         if spec.main_category.startswith("option_"):
             return spec.sub_category in OPTION_FIELDS
-        return spec.key in INPUT_FIELDS
+        return spec.main_category in {"storage_unit", "flow_divider"} or spec.key in INPUT_FIELDS or spec.key == ("subcatchment", "lid_controls")
 
     def raw_category(self, main_api_name: str) -> str:
         """Return the original category behind one safe API name."""
@@ -862,7 +839,7 @@ class CategoryAccessor:
         main_api_name = api_name(self._raw_main_category)
         for subcategory_name in catalog.subcategories(self._raw_main_category, self._mode):
             spec = catalog.spec(main_api_name, subcategory_name)
-            callable_object = GetterCallable(self._model, spec) if self._mode == "get" else SetterCallable(self._model, spec)
+            callable_object = self._callable_for_spec(spec)
             setattr(self, subcategory_name, callable_object)
 
     def __dir__(self) -> list[str]:
@@ -887,9 +864,65 @@ class CategoryAccessor:
                 f"Unknown parameter '{subcategory_name}' for category '{api_name(self._raw_main_category)}'.{suffix}"
             )
         spec = catalog.spec(api_name(self._raw_main_category), subcategory_name)
-        callable_object = GetterCallable(self._model, spec) if self._mode == "get" else SetterCallable(self._model, spec)
+        callable_object = self._callable_for_spec(spec)
         setattr(self, subcategory_name, callable_object)
         return callable_object
+
+    def _callable_for_spec(self, spec: ParameterSpec):
+        if self._mode == "get":
+            return GetterCallable(self._model, spec)
+        if spec.key == ("subcatchment", "lid_controls"):
+            return SubcatchmentLIDControlsSetter(self._model, spec)
+        return SetterCallable(self._model, spec)
+
+
+class SubcatchmentLIDControlsSetter:
+    """Callable manager for assigning LID controls to subcatchments."""
+
+    __signature__ = inspect.Signature(
+        parameters=[
+            inspect.Parameter("value", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+            inspect.Parameter("ids", inspect.Parameter.POSITIONAL_OR_KEYWORD, default=None),
+        ]
+    )
+
+    def __init__(self, model: "SWMMModel", spec: ParameterSpec) -> None:
+        self._model = model
+        self._spec = spec
+        self.__name__ = spec.sub_category
+        self.__doc__ = (
+            "Set or edit LID Usage Editor rows for subcatchments.\n\n"
+            "Mandatory for add(): subcatchment ID, LID control ID, and one sizing option: "
+            "area=..., area_percent=..., or occupies_full_subcatchment=True.\n"
+            "Optional add() settings: number=1, width, initial_saturation, "
+            "from_impervious_percent, from_pervious_percent, return_flow_to_pervious, "
+            "report_file, drain_to, replace=False.\n\n"
+            "Examples\n--------\n"
+            ">>> m.set.subcatchment.lid_controls.add('S1', 'BR1', area_percent=10)\n"
+            ">>> m.set.subcatchment.lid_controls.remove('S1', 'BR1')\n"
+            ">>> m.set.subcatchment.lid_controls.clear('S1')\n"
+            ">>> m.set.subcatchment.lid_controls([{'lid_control': 'BR1', 'area_percent': 10}], ids='S1')\n"
+        )
+
+    def __call__(self, value, ids=None):
+        """Replace all LID usages for selected subcatchments."""
+
+        return self._model._set_subcatchment_lid_controls(value=value, ids=ids)
+
+    def add(self, subcatchment, lid_control, **options):
+        """Add one LID control usage row to a subcatchment."""
+
+        return self._model._add_subcatchment_lid_control(subcatchment, lid_control, **options)
+
+    def remove(self, subcatchment, lid_control=None):
+        """Remove one LID control assignment from a subcatchment."""
+
+        return self._model._remove_subcatchment_lid_control(subcatchment, lid_control)
+
+    def clear(self, subcatchment):
+        """Remove all LID control assignments from a subcatchment."""
+
+        return self._model._clear_subcatchment_lid_controls(subcatchment)
 
 
 class GetterCallable:

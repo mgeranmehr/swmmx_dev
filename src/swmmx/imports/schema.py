@@ -116,6 +116,10 @@ STORAGE_FIELDS = (
     "area_constant",
     "evaporation_factor",
     "seepage_loss",
+    "surcharge_depth",
+    "suction_head",
+    "hydraulic_conductivity",
+    "initial_moisture_deficit",
     "tag",
 )
 

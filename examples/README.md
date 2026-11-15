@@ -27,6 +27,7 @@ Additional notebooks:
 | `14_all_remove_functions.ipynb` | Categorized reference notebook for every public remove endpoint, including dependencies, force behavior, and outputs |
 | `15_all_plot_functions.ipynb` | Comprehensive plotting reference for layout, time-series, and profile APIs, including every input, output, variable family, style table, and save rule |
 | `16_all_import_export_functions.ipynb` | Comprehensive import/export reference for `m.import_csv`, `m.import_gis`, field matching, result objects, options, troubleshooting, and export workflows |
+| [`22_storage_units_and_flow_dividers.ipynb`](22_storage_units_and_flow_dividers.ipynb) | Storage curves, all four divider types, validation/removal, save/reopen, CSV/Excel/GIS round trips, annotated layout and native drawdown/diversion comparisons |
 
 Run an example from the repository root:
 
@@ -58,3 +59,18 @@ Notes:
 - Excel export requires optional `openpyxl`.
 - Run-based examples require a working EPA SWMM engine for the current platform.
 - `03_step_by_step_runs_dynamic_control.py` is intentionally honest about the current boundary: step timing is available, while live `step.get` / `step.set` control is future work.
+
+### 23 — Landcover: the complete practical guide
+
+[23_landcover.ipynb](23_landcover.ipynb) merges the previous examples 23 and 24.
+Its 46 progressive lessons cover simple setup, class editing, manual and GIS
+coverage, structured diagnostics, selective preview/apply, units, undo/redo,
+infiltration, LID bounds, scenarios, persistence, native simulations, exercises,
+and JSON contracts for a future frontend.
+
+Use **Restart Kernel and Run All**. Setup is explained in lesson 1. Teaching data
+are generated locally; outputs go to `examples/output/landcover_044`. Synthetic
+parameters and rainfall are examples, not local design recommendations.
+The reproducible source is `_build_landcover_notebook.py`.
+See the [modelling guide](../docs/landcover.md) and
+[backend contract](../docs/landcover_backend.md).

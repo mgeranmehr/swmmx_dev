@@ -1,5 +1,12 @@
 include README.md
 include LICENSE
+include CHANGELOG.md
+include CITATION.cff
+recursive-include docs *.md
+include examples/23_landcover.ipynb
+include examples/_build_landcover_notebook.py
+include examples/example.inp
+include examples/data/landcover_surfaces.geojson
 recursive-include example *.inp
 recursive-include src/swmmx/bin *
 recursive-include src/swmmx/schemas *.csv

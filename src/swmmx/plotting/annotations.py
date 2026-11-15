@@ -601,7 +601,11 @@ def _node_records(model: "SWMMModel", node_points: Mapping[str, tuple[float, flo
             point = node_points.get(object_id)
             if point is None:
                 continue
-            record = _row_record(fields, row)
+            if section in {"STORAGE", "DIVIDERS"}:
+                from ..node_fields import node_record
+                record = node_record("storage_unit" if section == "STORAGE" else "flow_divider", row)
+            else:
+                record = _row_record(fields, row)
             record.update(
                 {
                     "id": object_id,
@@ -744,11 +748,23 @@ def _lid_usage_annotation_records(
         point = plotted_points.get(object_id) or centroids.get(subcatchment_id)
         if point is None:
             continue
-        record = _row_record(LID_USAGE_FIELDS, row)
+        if hasattr(model, "_lid_usage_record"):
+            record = dict(model._lid_usage_record(row))
+            # Keep both model-facing and plotting-facing spellings available in
+            # templates.  ``m.get.subcatchment.lid_controls()`` exposes
+            # ``area_percent`` and ``return_flow_to_pervious``; earlier layout
+            # records exposed ``subcatchment_id``, ``impervious_treated_percent``,
+            # and ``out_to_pervious``.  Annotation templates should support both.
+            record.setdefault("subcatchment_id", record.get("subcatchment", subcatchment_id))
+            record.setdefault("impervious_treated_percent", record.get("from_impervious_percent"))
+            record.setdefault("out_to_pervious", record.get("return_flow_to_pervious"))
+        else:
+            record = _row_record(LID_USAGE_FIELDS, row)
         record.update(
             {
                 "id": object_id,
                 "subcatchment_id": subcatchment_id,
+                "subcatchment": record.get("subcatchment", subcatchment_id),
                 "lid_control": control_id,
                 "element_type": "lid_usage",
                 "layer": "lid_usages",

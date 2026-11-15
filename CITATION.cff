@@ -5,7 +5,7 @@ authors:
   given-names: "Mohammadali"
 orcid: https://orcid.org/0000-0001-7075-915X
 title: "swmmx: A Python toolkit for building, editing, running, importing, visualizing, and exporting EPA SWMM models"
-version: v0.0.39
+version: v0.0.44
 doi: 10.5281/zenodo.20312405
-date-released: 2026-05-20
+date-released: 2026-09-20
 url: "https://github.com/mgeranmehr/swmmx_dev"
